@@ -23,26 +23,28 @@ Project Atmos uses three repositories:
 
 We choose **GitHub Actions** as the automation platform and **Docker Hub** as the container registry.
 
-The pipeline in `project-atmos-dev` is one workflow, `ci-delivery.yml`, with three stages. CI and delivery are separate blocks of the same run, so the image that is built is the image that is published.
+The pipeline in `project-atmos-dev` is one workflow, `ci-delivery.yml`, with four jobs. The image is built once in the `build` job and passed to the `delivery` job, so the image that is built is the image that is published.
 
 Runs on pushes and Pull Requests targeting `main` and `develop`:
 
 1. **Lint** (Ruff for the backend, oxlint for the frontend).
 2. **Tests** (pytest).
-3. **Delivery**, after lint and tests pass:
-   1. Build the Docker images.
-   2. Tag them: `<service>:<version>-<sha6>`.
-   3. Push them to Docker Hub.
-   4. Trigger the deployment pipeline in `project-atmos-k8s` with a `repository_dispatch` event (`deploy`) that carries the image tag. The workflow ends here.
+3. **Build**, after lint and tests pass: build the Docker images.
+4. **Delivery**, after the build:
+   1. Tag the images: `<service>:<version>-<sha6>`.
+   2. Push them to Docker Hub.
+   3. Trigger the deployment pipeline in `project-atmos-k8s` with a `repository_dispatch` event (`deploy`) that carries the image tag. The workflow ends here.
 
-Steps 3.2-3.4 run only on a push to `develop`. On Pull Requests and on pushes to `main` the images are built but not published, and nothing is triggered.
+The `delivery` job runs only on a push to `develop`. On Pull Requests and on pushes to `main` the images are built but not published, and nothing is triggered.
 
 ```text
 Code
  ↓
 Lint → Tests
  ↓
-Build image → Tag → Push to Docker Hub   (develop only)
+Build image
+ ↓
+Tag → Push to Docker Hub   (develop only)
  ↓
 Trigger project-atmos-k8s pipeline
 ```
@@ -50,15 +52,15 @@ Trigger project-atmos-k8s pipeline
 ### Image tags
 
 ```text
-streetflow13/project-atmos-backend:v1.0.0-<sha6>
-streetflow13/project-atmos-frontend:v1.0.0-<sha6>
+<DOCKERHUB_NAMESPACE>/<PROJECT_NAME>-backend:v1.0.0-<sha6>
+<DOCKERHUB_NAMESPACE>/<PROJECT_NAME>-frontend:v1.0.0-<sha6>
 ```
 
-The tag contains the application version and the first 6 characters of the Git commit SHA. The version is set in `APP_VERSION` in `ci-delivery.yml`. Images are built and published only from `develop`.
+The tag is applied in the `delivery` job. It contains the application version and the first 6 characters of the Git commit SHA. The version is set in `APP_VERSION` in `ci-delivery.yml`. Images are built and published only from `develop`.
 
 ### Deployment (out of scope of this repository)
 
-`project-atmos-dev` does not deploy anything and has no cloud credentials. The pipeline in `project-atmos-k8s` is triggered by the delivery workflow. It is responsible for pulling the image from Docker Hub, validating it, and deploying to the DEV namespace in Kubernetes. PROD deployment, approvals, and authentication to AWS belong to that pipeline and will be described in its own ADR once it exists.
+`project-atmos-dev` does not deploy anything and has no cloud credentials. The pipeline in `project-atmos-k8s` is triggered by the delivery workflow. It is responsible for checking the image on Docker Hub and deploying to the DEV namespace in Kubernetes. PROD deployment, approvals, and authentication to AWS belong to that pipeline and are not defined yet.
 
 ## Why
 
@@ -74,7 +76,6 @@ The tag contains the application version and the first 6 characters of the Git c
 - **Positive:** Application changes are automatically validated and packaged.
 - **Positive:** Images are versioned and stored in a dedicated registry.
 - **Positive:** Application, Kubernetes, and infrastructure workflows are independently managed.
-- **Trade-off:** Until the pipeline in `project-atmos-k8s` exists, the trigger has no receiver and nothing is deployed.
 - **Trade-off:** There is no environment promotion in this repository. The same image tag is deployed everywhere, and the separation of DEV and PROD is the responsibility of the k8s pipeline.
 - **Trade-off:** The delivery process depends on GitHub Actions and Docker Hub.
 - **Trade-off:** Multiple repositories require coordination: the `repository_dispatch` payload (`image_tag`) is a contract between `project-atmos-dev` and `project-atmos-k8s`.

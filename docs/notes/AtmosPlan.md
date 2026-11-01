@@ -23,7 +23,7 @@ You will practice the full loop:
 | P4  | Use **Redis** (e.g. cache recent city lookups — document your design)                                                                                      |
 | P5  | Local setup with **Docker** + **Docker Compose** (app + MongoDB + Redis)                                                                                   |
 | P6  | Deploy to **Kubernetes** with **Kustomize** for **two environments:** `dev` **and** `prod`                                                                 |
-| P7  | **Ingress** for external access; use **nip.io** as free DNS                                                                                                |
+| P7  | **Gateway API + AWS ALB** for external access; use the ALB address                                                                                                |
 | P8  | **Kubernetes CronJob** rotates MongoDB credentials (username + password) on a schedule (lab: every minute is OK) without permanent downtime — document how |
 | P9  | **CI/CD**: lint/test → build image → push registry → deploy path (at least to `dev`)                                                                       |
 | P10 | **Monitoring + logging**: chosen and documented; you can show “request failed → I find it”                                                                 |
@@ -36,7 +36,7 @@ You will practice the full loop:
 
 ### Fixed by this brief
 
-OpenWeather API · MongoDB · Redis · Docker · Docker Compose · Kubernetes · Kustomize · Ingress · nip.io · DB credential-rotation CronJob · two envs (`dev`, `prod`) · CI/CD · monitoring + logging · city-based web UI
+OpenWeather API · MongoDB · Redis · Docker · Docker Compose · Kubernetes · Kustomize · Gateway API · ALB · DB credential-rotation CronJob · two envs (`dev`, `prod`) · CI/CD · monitoring + logging · city-based web UI
 
 ### You choose
 
@@ -143,7 +143,7 @@ For this project you need **at least 3 ADRs** (see Phase 1).
 ### Phase 3 — Kubernetes + Kustomize
 
 - [ ] `kustomize` layout: `base/` + `overlays/dev` + `overlays/prod`  
-- [ ] Ingress + **nip.io** hosts documented (e.g. `weather-dev.<ip>.nip.io`)  
+- [ ] ALB address of the cluster documented  
 - [ ] ConfigMaps/Secrets for config and credentials (lab-safe; README warns not prod-grade)  
 - [ ] CronJob rotates MongoDB username/password; app stays usable or recovers — **document the mechanism**  
 - [ ] Commands documented: `kubectl apply -k overlays/dev` (and prod)  
@@ -178,7 +178,7 @@ For this project you need **at least 3 ADRs** (see Phase 1).
 | PS-3  | Frontend city search UI                  |
 | PS-4  | Compose stack (app, MongoDB, Redis)      |
 | PS-5  | K8s base + Kustomize `dev` / `prod`      |
-| PS-6  | Ingress + nip.io                         |
+| PS-6  | Gateway + ALB address                        |
 | PS-7  | MongoDB credential-rotation CronJob      |
 | PS-8  | CI/CD pipeline                           |
 | PS-9  | Monitoring + logging                     |

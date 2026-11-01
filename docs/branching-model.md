@@ -55,8 +55,8 @@ The pipeline is one workflow, `ci-delivery.yml`:
 
 Image tags contain the application version and the first 6 characters of the Git commit SHA:
 
-- `streetflow13/project-atmos-backend:v1.0.0-<sha6>`
-- `streetflow13/project-atmos-frontend:v1.0.0-<sha6>`
+- `<DOCKERHUB_NAMESPACE>/<PROJECT_NAME>-backend:v1.0.0-<sha6>`
+- `<DOCKERHUB_NAMESPACE>/<PROJECT_NAME>-frontend:v1.0.0-<sha6>`
 
 Pull Requests and pushes to `main` build the images but do not publish them or trigger anything.
 
@@ -101,7 +101,7 @@ Pull Requests and successful CI checks are the standard requirements for integra
 | DEV | `develop` | Integration and development validation |
 | PROD | `main` (release record) | Stable production releases |
 
-This repository only publishes images. Deployment to the DEV and PROD namespaces is performed by the pipeline in `project-atmos-k8s`, which is planned.
+This repository only publishes images. Deployment to the DEV and PROD namespaces is performed by the pipeline in `project-atmos-k8s`.
 
 The deployment infrastructure is maintained separately in the `project-atmos-k8s` and `project-atmos-iac` repositories.
 
@@ -121,10 +121,11 @@ flowchart TD
     X["fix/*"] -->|"Pull Request + CI"| D
 
     D --> CI_D["Lint, Tests"]
-    CI_D --> CD_D["Build, Tag, Push to Docker Hub"]
+    CI_D --> BLD_D["Build images"]
+    BLD_D --> CD_D["Tag, Push to Docker Hub"]
     CD_D --> IMG_D["Docker images: v1.0.0-sha6"]
     IMG_D --> TRG["Trigger project-atmos-k8s pipeline"]
-    TRG --> DEV["Deployment to DEV (k8s repo, planned)"]
+    TRG --> DEV["Deployment to DEV (k8s repo)"]
     DEV --> PROD["Validated in DEV"]
 
     PROD -->|"Release Pull Request + CI + Review"| M["main"]

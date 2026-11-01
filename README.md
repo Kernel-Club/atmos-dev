@@ -147,3 +147,15 @@ docker compose down -v
 ```
 
 > `docker compose down -v` permanently removes the local database volume.
+
+## CI/CD
+
+The workflow `.github/workflows/ci-delivery.yml` runs on every push and pull request to `main` and `develop`: lint, tests and a build of both images.
+
+On a push to `develop` it also tags the images (`v1.0.0-<commit>`), pushes them to Docker Hub and starts the deploy pipeline in `project-atmos-k8s`.
+
+Settings come from GitHub, nothing is written in the workflow:
+- organization variables: `PROJECT_NAME`, `DOCKERHUB_NAMESPACE`
+- repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `K8S_REPO_TOKEN`
+
+Images: `<DOCKERHUB_NAMESPACE>/<PROJECT_NAME>-backend` and `-frontend`. The k8s repository is `<owner>/<PROJECT_NAME>-k8s`.

@@ -127,6 +127,17 @@ function App() {
   function getWeatherCondition(description) {
     const text = description.toLowerCase()
 
+    if (text.includes('thunderstorm')) {
+      return 'condition-storm'
+    }
+
+    if (
+      text.includes('squall') ||
+      text.includes('tornado')
+    ) {
+      return 'condition-wind'
+    }
+
     if (
       text.includes('snow') ||
       text.includes('sleet')
@@ -140,6 +151,18 @@ function App() {
       text.includes('shower')
     ) {
       return 'condition-rain'
+    }
+
+    if (
+      text.includes('mist') ||
+      text.includes('fog') ||
+      text.includes('haze') ||
+      text.includes('smoke') ||
+      text.includes('dust') ||
+      text.includes('sand') ||
+      text.includes('ash')
+    ) {
+      return 'condition-fog'
     }
 
     if (

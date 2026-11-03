@@ -40,8 +40,12 @@ function App() {
     }
   }
 
-  async function handleHistoryOpen() {
+  function handleHistoryOpen() {
     setHistoryOpen(true)
+    loadHistory()
+  }
+
+  async function loadHistory() {
     setHistoryLoading(true)
     setHistoryError('')
 
@@ -113,6 +117,11 @@ function App() {
   function handleQuickCity(cityName) {
     setCity(cityName)
     handleSearch(cityName)
+  }
+
+  function handleHistorySelect(cityName) {
+    handleHistoryClose()
+    handleQuickCity(cityName)
   }
 
   function getWeatherCondition(description) {
@@ -205,6 +214,26 @@ function App() {
               <h2>WEATHER HISTORY</h2>
 
               <button
+                className={`history-refresh ${historyLoading ? 'is-loading' : ''}`}
+                onClick={loadHistory}
+                disabled={historyLoading}
+                aria-label="Refresh history"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 4v6h-6" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L21 10" />
+                </svg>
+              </button>
+
+              <button
                 className="history-clear"
                 onClick={handleClearHistory}
               >
@@ -240,6 +269,14 @@ function App() {
                     <div
                       className="history-card"
                       key={`${item.city}-${item.timestamp}-${index}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleHistorySelect(item.city)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          handleHistorySelect(item.city)
+                        }
+                      }}
                     >
                       <div className="history-card-top">
                         <strong>{item.city}</strong>

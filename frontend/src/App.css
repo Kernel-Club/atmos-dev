@@ -1123,6 +1123,7 @@ drop-shadow(0 0 40px rgba(10, 40, 160, 0.3));
 }
 
 .history-back,
+.history-refresh,
 .history-clear {
   border: 0;
   background: transparent;
@@ -1151,6 +1152,41 @@ drop-shadow(0 0 40px rgba(10, 40, 160, 0.3));
 .history-back:hover {
   color: #ffffff;
   transform: translateX(-2px);
+}
+
+.history-refresh {
+  width: 34px;
+  height: 34px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+}
+
+.history-refresh svg {
+  width: 17px;
+  height: 17px;
+}
+
+.history-refresh:hover:not(:disabled) {
+  color: #ffffff;
+  transform: rotate(45deg);
+}
+
+.history-refresh.is-loading svg {
+  animation: historyRefreshSpin 0.8s linear infinite;
+}
+
+.history-refresh:disabled {
+  cursor: default;
+}
+
+@keyframes historyRefreshSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .history-clear {
@@ -1189,13 +1225,16 @@ drop-shadow(0 0 40px rgba(10, 40, 160, 0.3));
 
   background: rgba(8, 28, 46, 0.55);
 
+  cursor: pointer;
+
   transition:
     border-color 0.2s ease,
     background 0.2s ease,
     transform 0.2s ease;
 }
 
-.history-card:hover {
+.history-card:hover,
+.history-card:focus-visible {
   border-color: rgba(74, 166, 255, 0.28);
   background: rgba(10, 34, 55, 0.72);
   transform: translateX(-2px);

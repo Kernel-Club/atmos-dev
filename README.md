@@ -1,8 +1,16 @@
 # Project Atmos
 
-The local version of weather web application built with **React, FastAPI, MongoDB, and Redis**.
+Weather web application built with **React, FastAPI, MongoDB, and Redis**.
 
 The application allows users to search for a city and view current weather information and weather search history.
+
+The same code and Dockerfiles run on every platform:
+
+| Platform | How it runs | Documentation |
+|---|---|---|
+| Local | Docker Compose (this README) | — |
+| Cloud | AWS EKS, GitHub Actions, Docker Hub | [docs/cloud](docs/cloud/architecture.md) |
+| On-premise | k3s on VirtualBox VMs, Jenkins, Nexus, Flux | [docs/on-premise](docs/on-premise/architecture.md) |
 
 ## Architecture
 
@@ -147,3 +155,25 @@ docker compose down -v
 ```
 
 > `docker compose down -v` permanently removes the local database volume.
+
+## CI/CD
+
+Each platform has its own pipeline. This repository contains only the application.
+
+### Cloud: GitHub Actions
+
+> **The workflow is started only by hand** (Actions → CI-Delivery → Run workflow). Push and pull request triggers are disabled because the cloud environment is not always running.
+
+The workflow `.github/workflows/ci-delivery.yml` runs lint, tests and a build of both images.
+
+On `develop` it also tags the images (`v1.0.0-<commit>`), pushes them to Docker Hub and starts the deploy pipeline in `project-atmos-k8s`.
+
+Settings come from GitHub, nothing is written in the workflow:
+- organization variables: `PROJECT_NAME`, `DOCKERHUB_NAMESPACE`
+- repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `K8S_REPO_TOKEN`
+
+Images: `<DOCKERHUB_NAMESPACE>/<PROJECT_NAME>-backend` and `-frontend`. The k8s repository is `<owner>/<PROJECT_NAME>-k8s`.
+
+### On-premise: Jenkins
+
+Jenkins polls `develop` of this repository. The `Jenkinsfile` lives in `project-atmos-onprem-jenkins`, not here. Images go to Nexus and Flux deploys them. See [docs/on-premise](docs/on-premise/architecture.md).

@@ -50,7 +50,7 @@ def test_weather_success(
         ],
     }
 
-    response = client.get("/weather/Seoul")
+    response = client.get("/api/weather/Seoul")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -80,7 +80,7 @@ def test_weather_city_not_found(
     mock_redis.get = AsyncMock(return_value=None)
     mock_get_weather.side_effect = ValueError("City not found")
 
-    response = client.get("/weather/notfound")
+    response = client.get("/api/weather/notfound")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "City not found"}

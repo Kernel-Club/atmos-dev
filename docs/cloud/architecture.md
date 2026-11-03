@@ -8,8 +8,8 @@ The project consists of three repositories:
 
 | Repository | Responsibility |
 |---|---|
-| `project-atmos-dev` | Application, Docker, Compose, CI |
-| `project-atmos-k8s` | Kubernetes and deployment configuration |
+| `project-atmos-dev` | Application, Docker, Compose, CI, image delivery |
+| `project-atmos-k8s` | Kubernetes configuration and deployment (CDeployment) |
 | `project-atmos-iac` | AWS infrastructure with Terraform |
 
 ---
@@ -47,10 +47,10 @@ flowchart LR
 | Containers | Docker |
 | Observability | Prometheus + Grafana + Loki |
 | Kubernetes | Amazon EKS |
-| Kubernetes Configuration | Kustomize |
+| Kubernetes Configuration | Helm |
 | Infrastructure | Terraform |
 | Terraform State | Amazon S3 |
-| CI | GitHub Actions |
+| CI / Delivery | GitHub Actions |
 | Container Registry | Docker Hub |
 | External Access | AWS Application Load Balancer + Gateway API |
 | Outbound Access | AWS NAT Gateway |
@@ -175,50 +175,41 @@ Outbound traffic from the cluster to the OpenWeather API goes through **Kubernet
 
 ---
 
-## 6. Deployment Process
+## 6. Delivery and Deployment Process
 
-### CI
+The process is split between two repositories.
 
-```text
-Code
-  ↓
-GitHub Actions
-  ↓
-Lint → Tests → Build
-  ↓
-Docker Image
-  ↓
-Docker Hub
-```
+### CI-Delivery (`project-atmos-dev`, `ci-delivery.yml`)
 
-Development images use immutable Git-based tags:
+One workflow, one run, on pushes and Pull Requests to `main` and `develop`:
 
 ```text
-<service>:<git-sha>
+Lint → Tests → Build image → Tag → Push to Docker Hub → Trigger k8s repository pipeline
 ```
 
-Production releases use explicit versions:
+The last three steps run only on a push to `develop`. On Pull Requests and on `main`, the image is built but not published.
+
+Images use tags with the application version and the first 6 characters of the Git commit SHA:
 
 ```text
-<service>:v1.0.0
+<service>:v1.0.0-<sha6>
 ```
 
-### CD
+The trigger is a `repository_dispatch` event (`deploy`, payload `image_tag`) sent to `project-atmos-k8s`. The workflow ends there.
+
+### CDeployment (`project-atmos-k8s`, planned)
 
 ```text
-Docker Hub
+Triggered by project-atmos-dev
   ↓
-Automatic DEV deployment
+Pull image from Docker Hub
   ↓
-Validation
+Validate
   ↓
-Manual approval
-  ↓
-PROD deployment
+Deploy to the DEV namespace
 ```
 
-DEV delivery is fully automated.  
-PROD deployment requires explicit manual approval.
+This pipeline is not implemented yet. PROD deployment and its approval rules will be defined together with it.
 
 ---
 
@@ -291,9 +282,9 @@ Actual cost depends on the AWS Region, instance configuration, storage, traffic,
 - Keep the application simple.
 - Separate application, Kubernetes, and infrastructure repositories.
 - Use managed AWS services where practical.
-- Automate DEV delivery.
-- Require manual approval for PROD.
-- Use immutable image versions.
+- Keep CI, delivery, and deployment as separate pipelines with one responsibility each.
+- Use versioned image tags that identify the commit.
+- Control PROD deployment in the deployment pipeline.
 - Never store real secrets in Git.
 - Keep infrastructure reproducible with Terraform.
 - Minimize cloud cost.

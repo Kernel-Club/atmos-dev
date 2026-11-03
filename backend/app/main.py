@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import OPENWEATHER_API_KEY
+from app.config import CORS_ORIGINS, OPENWEATHER_API_KEY
 from app.services.history import clear_weather_history, get_weather_history
 from app.services.weather import get_weather
 
@@ -12,22 +12,25 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+api = APIRouter(prefix="/api")
+
 
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/config-check")
+@api.get("/config-check")
 async def config_check() -> dict[str, bool]:
     return {"openweather_configured": bool(OPENWEATHER_API_KEY)}
 
-@app.get("/weather/{city}")
+@api.get("/weather/{city}")
 async def weather(city: str):
     try:
         return await get_weather(city)
@@ -37,11 +40,14 @@ async def weather(city: str):
             detail=str(exc),
         )
 
-@app.get("/history")
+@api.get("/history")
 async def history():
     return await get_weather_history()
 
-@app.delete("/history")
+@api.delete("/history")
 async def clear_history():
     await clear_weather_history()
     return {"status": "ok"}
+
+
+app.include_router(api)

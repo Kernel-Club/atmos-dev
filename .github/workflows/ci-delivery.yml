@@ -1,14 +1,31 @@
 name: CI-Delivery
 
+# 🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴
+# 🔴  !!! MANUAL START ONLY: THE WHOLE PIPELINE RUNS ONLY BY HAND !!!
+# 🔴
+# 🔴  This repository is shared by two platforms:
+# 🔴    - cloud:   GitHub Actions (this file) -> Docker Hub -> project-atmos-k8s
+# 🔴    - on-prem: Jenkins (project-atmos-onprem-jenkins) -> Nexus -> Flux
+# 🔴
+# 🔴  The cloud environment is destroyed when not in use, so push and
+# 🔴  pull_request triggers are DISABLED. Nothing in this file starts
+# 🔴  automatically: no lint, no tests, no build, no delivery.
+# 🔴
+# 🔴  Start it by hand: Actions -> CI-Delivery -> Run workflow (pick a branch).
+# 🔴  Delivery (push to Docker Hub + trigger k8s) runs only on develop.
+# 🔴
+# 🔴  To turn automatic runs back on: uncomment push / pull_request below.
+# 🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴
 on:
-  push:
-    branches:
-      - main
-      - develop
-  pull_request:
-    branches:
-      - main
-      - develop
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - main
+  #     - develop
+  # pull_request:
+  #   branches:
+  #     - main
+  #     - develop
 
 permissions:
   contents: read
@@ -78,8 +95,8 @@ jobs:
         run: pytest
 
   build:
-    # Only builds the images (checks that the Dockerfiles work). On a push to
-    # develop the images are saved as an artifact for the delivery job.
+    # Only builds the images (checks that the Dockerfiles work). On develop
+    # (push or manual run) the images are saved as an artifact for delivery.
     name: Build images
     runs-on: ubuntu-latest
     needs:
@@ -87,7 +104,7 @@ jobs:
       - test
 
     env:
-      SAVE_IMAGES: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+      SAVE_IMAGES: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
 
     steps:
       - name: Checkout
@@ -127,7 +144,7 @@ jobs:
     name: Tag, push and trigger k8s
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
 
     steps:
       - name: Set image tag

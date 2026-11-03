@@ -119,6 +119,13 @@ function App() {
     const text = description.toLowerCase()
 
     if (
+      text.includes('snow') ||
+      text.includes('sleet')
+    ) {
+      return 'condition-snow'
+    }
+
+    if (
       text.includes('rain') ||
       text.includes('drizzle') ||
       text.includes('shower')

@@ -62,4 +62,4 @@ When fixes are merged into `main` of the application repository, synchronize `ma
 
 ## 5. Branch Protection
 
-GitHub Rulesets are not enforced for private repositories under the current organization plan. The branching policy is followed by the team's development process, not guaranteed by GitHub.
+Branch protection is not enforced in GitHub for the platform repositories. The branching policy is followed by the team's development process, not guaranteed by GitHub.

@@ -28,7 +28,7 @@ flowchart LR
             pods["Pods on both nodes:<br/>Traefik ingress, Flux,<br/>frontend, backend, MongoDB, Redis,<br/>Prometheus, Grafana"]
         end
     end
-    github["GitHub<br/>project-atmos-dev<br/>project-atmos-onprem-*"]
+    github["GitHub<br/>project-atmos-dev<br/>project-atmos-onprem-ansible<br/>project-atmos-onprem-jenkins<br/>project-atmos-onprem-k3s"]
 
     admin -- "VBoxManage, SSH" --> tools
     admin -- "VBoxManage, SSH" --> cp
@@ -63,12 +63,26 @@ flowchart LR
 
 The cluster is a real two-node cluster: the scheduler uses both nodes for pods. `tools` is separate, so a broken cluster does not stop builds and Jenkins does not take RAM from the application.
 
-Jenkins, Nexus and Traefik on `tools` run as Docker containers with a data volume, a memory limit and the restart policy `unless-stopped`. k3s and node-exporter run as systemd services. Everything starts by itself after a restart.
+Jenkins, Nexus and Traefik on `tools` run as Docker containers with a memory limit and the restart policy `unless-stopped`; Jenkins and Nexus also have a data volume. k3s and node-exporter run as systemd services. Everything starts by itself after a restart.
+
+Jenkins builds the images with the Docker Engine of `tools` through the mounted Docker socket. It runs one build at a time (one executor), so a build fits into the RAM budget.
 
 **Start and stop:**
 - `vms.yml` creates the servers that do not exist and starts them in the order `tools`, `k8s-cp`, `k8s-w1`.
 - `stop.yml` stops them safely in the order `k8s-w1`, `k8s-cp`, `tools`.
 - When the servers are stopped, nothing runs on the host. Stop them before games, Windows updates or sleep.
+
+**Rebuild:**
+- **Whole platform:** restore the `clean` snapshots (or recreate the servers with `vms.yml`) and run `site.yml`. Then do the manual steps, because secrets are not stored in Git and Jenkins configuration as code is out of scope:
+  1. In Jenkins, add the deploy key and the registry credentials and create the Pipeline job.
+  2. Start one Jenkins build. Nexus is empty after a rebuild, so the application cannot start before the first images exist.
+  3. Bootstrap Flux with a new short-lived token.
+  4. Create the Kubernetes Secrets.
+
+  Flux then installs the application and monitoring from `project-atmos-onprem-k3s`.
+- **Only `k8s-w1`:** run `kubectl delete node k8s-w1` before the new server joins. Otherwise k3s rejects it, because the password of the old node is still stored in the cluster.
+- **`k8s-cp`:** a new control plane is a new cluster. Rebuild both cluster servers and repeat the Flux bootstrap and the Secrets.
+- Weather history (MongoDB) and images (Nexus) have no backup and are lost on a rebuild.
 
 ## 3. Resource budget
 
@@ -120,7 +134,9 @@ Jenkins, Nexus and Traefik on `tools` run as Docker containers with a data volum
 | kube-state-metrics (`monitoring`) | 0.1 GB |
 | **Total / free** | **3.25 GB / 1.25 GB** |
 
-Monitoring uses about 1 GB. Every pod has a memory limit and a CPU request; pods have no CPU limits.
+Monitoring uses about 1 GB. Every pod has a memory request, a memory limit and a CPU request; pods have no CPU limits. The scheduler places pods by their requests, and `k8s-cp` has only about 1.2 GB for pods, so the requests must be set.
+
+MongoDB and Prometheus are pinned to `k8s-w1` with a `nodeSelector`. local-path keeps their data on the node where they start first, and the disk budget below plans these volumes on `k8s-w1`.
 
 Disk: `k8s-cp` 40 GB (OS 10 GB, k3s and images 10 GB, free 20 GB); `k8s-w1` 60 GB (OS 10 GB, images 20 GB, volumes 10 GB: MongoDB 5 GB, Prometheus 5 GB; free 20 GB).
 
@@ -130,11 +146,12 @@ The numbers are planned values. Real use is compared with this budget in Grafana
 
 - The home network is `192.168.1.0/24`. Each server has one bridged adapter, so it is a normal device in the home network.
 - Fixed addresses (netplan), outside the router DHCP range. SSH only with keys, only from the admin machine.
+- The host PC also needs a fixed address (DHCP reservation in the router): `ufw` allows SSH and the Kubernetes API only from this address. Traffic from WSL2 reaches the servers with the address of the host.
 - No DNS server. Ansible writes the names to the hosts files:
   - Windows hosts file: all `*.atmos.lan` names (for the browser);
   - `/etc/hosts` on every server: `nexus.atmos.lan` (for Docker and k3s);
-  - k3s `coredns-custom` ConfigMap: `nexus.atmos.lan` (for Flux in pods).
-- A self-signed CA and a certificate for `*.atmos.lan` are created by Ansible. The CA is trusted on the admin machine, in Docker on `tools`, on the cluster nodes (`registries.yaml`) and in Flux.
+  - k3s `coredns-custom` ConfigMap: `nexus.atmos.lan` (for Flux in pods; pods do not read `/etc/hosts` of the node). It is placed by Ansible in `roles/k3s/` together with `registries.yaml`.
+- A self-signed CA and a certificate for `*.atmos.lan` are created by Ansible. The name is set in the SAN field of the certificate: Docker, containerd and Flux do not accept a name only in the CN field. The CA is trusted on the admin machine, in Docker on `tools`, on the cluster nodes (`registries.yaml`) and in Flux.
 - The home router forwards no ports. Nothing is reachable from the internet.
 
 | Name | Address | Served by | Protocol |
@@ -151,7 +168,9 @@ The numbers are planned values. Real use is compared with this budget in Grafana
 | `k8s-cp` | 192.168.1.51 | 22 (admin), 6443 (admin, `k8s-w1`), 10250 and 8472/udp (cluster nodes), 80/443 (home network), 9100 (cluster nodes) |
 | `k8s-w1` | 192.168.1.52 | 22 (admin), 10250 and 8472/udp (cluster nodes), 80/443 (home network), 9100 (cluster nodes) |
 
-- Jenkins, the Nexus web interface and the Nexus Docker connector listen only on `127.0.0.1`. Only Traefik on `tools` reaches them.
+- On `k8s-cp` and `k8s-w1`, `ufw` also allows the k3s pod network `10.42.0.0/16` and service network `10.43.0.0/16`. Without these rules, pods cannot reach the API server or node-exporter on their own node (for example Flux, CoreDNS, Prometheus).
+- Jenkins, the Nexus web interface and the Nexus Docker connector are published only on `127.0.0.1` of `tools`. Traefik runs in the host network of `tools`, so it reaches them there.
+- Ports that Docker publishes in the normal way are not filtered by `ufw`: Docker adds its own `iptables` rules before the `ufw` rules. Because Traefik uses the host network, its ports 80, 443 and 5000 are real host ports, and the `ufw` rules above apply to them.
 - The k3s load balancer (ServiceLB) publishes the cluster Traefik on ports 80/443 of both nodes. The names point to `k8s-w1`.
 - In the cluster, NetworkPolicy allows MongoDB and Redis to accept traffic only from the backend.
 - The addresses are examples. The real addresses are set in the Ansible inventory.
@@ -198,12 +217,12 @@ flowchart LR
 | Server configuration | Ansible, versions pinned in `group_vars/` | admin machine → servers |
 | Kubernetes | k3s (pinned version) | `k8s-cp`, `k8s-w1` |
 | Ingress | Traefik bundled with k3s, memory limits in a `HelmChartConfig` | cluster |
-| Reverse proxy | Traefik container, file configuration, self-signed certificate | `tools` |
+| Reverse proxy | Traefik container in the host network, file configuration, self-signed certificate | `tools` |
 | Storage | k3s `local-path` (data on the disk of the node that runs the pod) | cluster |
-| CI | Jenkins container, pinned plugins (Pipeline, Git, Credentials, Docker Pipeline) | `tools` |
+| CI | Jenkins container, pinned plugins (Pipeline, Git, Credentials, Docker Pipeline), one executor | `tools` |
 | Image build | Docker Engine | `tools` |
 | Image registry | Nexus Repository, Docker hosted repository, cleanup policy | `tools` |
-| Packaging | Helm chart `charts/atmos/` | gitops repository |
+| Packaging | Helm chart `charts/atmos/` | `project-atmos-onprem-k3s` |
 | GitOps / CD | Flux with image automation | cluster |
 | Firewall | `ufw` on every server; NetworkPolicy in the cluster | servers, cluster |
 | Metrics | Prometheus (retention 3 days), kube-state-metrics | cluster |
@@ -215,10 +234,10 @@ flowchart LR
 
 | Secret | Stored in |
 |---|---|
-| Nexus and Jenkins admin passwords, Nexus users, registry credentials | Ansible Vault in `project-atmos-onprem-provision`; the vault password stays outside the repository |
-| Read-only deploy key for `project-atmos-dev`, Nexus push user | Jenkins credential store |
+| Nexus and Jenkins admin passwords, Nexus users, registry credentials | Ansible Vault in `project-atmos-onprem-ansible`; the vault password stays outside the repository |
+| Read-only deploy key for `project-atmos-dev`, Nexus push user | Jenkins Credentials store (not in Git) |
 | OpenWeather key, MongoDB password, Grafana admin password, Flux registry credentials | Kubernetes Secrets created by hand, never in Git |
-| Flux deploy key (write access to `project-atmos-onprem-gitops` only) | Flux in the cluster and GitHub |
+| Flux deploy key (write access to `project-atmos-onprem-k3s` only) | Flux in the cluster and GitHub |
 | GitHub token for the Flux bootstrap | used once, then revoked |
 
 Nexus has separate users: Jenkins can push; the cluster and Flux can only pull.
@@ -227,7 +246,7 @@ The reasons for the main choices are recorded in the ADRs: [ADR-001 Platform (k3
 
 ## 6. Delivery flow
 
-**Developer → GitHub → Jenkins → Nexus → Flux → gitops repository → cluster → Traefik → browser**
+**Developer → GitHub → Jenkins → Nexus → Flux → `project-atmos-onprem-k3s` → cluster → Traefik → browser**
 
 | Step | Where | What happens |
 |---|---|---|
@@ -237,7 +256,7 @@ The reasons for the main choices are recorded in the ADRs: [ADR-001 Platform (k3
 | 4 | Jenkins (`tools`) | Docker builds the backend image and the frontend image (API address `/api`) |
 | 5 | Nexus (`tools`) | Jenkins pushes the images with the tag `<build>-<short-sha>`, for example `42-a1b2c3d`, and removes the local images |
 | 6 | Flux (cluster) | Flux scans Nexus; the image policy selects the highest build number |
-| 7 | GitHub | Flux commits the new tag to `main` of `project-atmos-onprem-gitops` |
+| 7 | GitHub | Flux commits the new tag to `main` of `project-atmos-onprem-k3s` |
 | 8 | Cluster | Flux upgrades the Helm release; the nodes pull the new images from Nexus; the pods are replaced |
 | 9 | Browser | `http://atmos.lan`: Traefik routes `/api` to the backend and `/` to the frontend |
 
@@ -248,7 +267,7 @@ sequenceDiagram
     participant J as Jenkins (tools)
     participant N as Nexus (tools)
     participant F as Flux (cluster)
-    participant G as GitHub: onprem-gitops
+    participant G as GitHub: onprem-k3s
     participant K as Cluster
     actor U as Browser
 
@@ -263,20 +282,32 @@ sequenceDiagram
     U->>K: http://atmos.lan
 ```
 
-- Jenkins does CI. Flux does CD. Jenkins has no kubeconfig and no access to the gitops repository.
-- Every deployed version is a commit in `project-atmos-onprem-gitops`.
+- Jenkins does CI. Flux does CD. Jenkins has no kubeconfig and no access to `project-atmos-onprem-k3s`.
+- Every deployed version is a commit in `project-atmos-onprem-k3s`.
+- The image policy is numerical: it reads the build number from the tag (`<build>-<short-sha>`) and selects the highest one.
+- The image tags and the Flux image policy markers are in `spec.values` of the HelmRelease, not in `charts/atmos/values.yaml`. Flux applies a change inside the chart only when the chart version changes, so a new tag in the chart values would not start an upgrade.
 - **Rollback:** suspend the image update automation (`flux suspend image update`), revert the tag commit in Git, and resume the automation after the fix.
 - **Status:** `flux get helmreleases` and `flux get images all` show the deployed version and failures.
 - The GitHub Actions workflow in `project-atmos-dev` is for the cloud and starts only by hand, so it does not run on the same commits.
 
 ## 7. Repositories
 
-| Repository | Responsibility | Main content |
-|---|---|---|
-| `project-atmos-dev` | Application, shared with the cloud version; nothing on-premise specific except the docs | application code, Dockerfiles, `docs/on-premise/` |
-| `project-atmos-onprem-provision` | Creates and configures the servers, installs the tools and k3s | `inventory/`, `group_vars/` (versions, Vault), `roles/` (`virtualbox_vm`, `common`, `docker`, `nexus`, `jenkins`, `traefik`, `k3s`), `vms.yml`, `site.yml`, `stop.yml` |
-| `project-atmos-onprem-jenkins` | CI pipeline | `Jenkinsfile` |
-| `project-atmos-onprem-gitops` | Desired state of the cluster | `flux-system/`, `charts/atmos/` (application, Ingress, NetworkPolicy), image automation, `monitoring/` |
+| Repository | Responsibility | Main content | User stories |
+|---|---|---|---|
+| `project-atmos-dev` | Application source, shared with the cloud version, and the on-premise documentation; nothing on-premise specific except the docs | application code, Dockerfiles, `docs/on-premise/` | US-01, US-07 |
+| `project-atmos-onprem-ansible` | Everything that creates and configures the servers | `inventory/`, `group_vars/` (versions, Ansible Vault), `roles/` (`virtualbox_vm`, `common`, `docker`, `nexus`, `jenkins`, `traefik`, `k3s`), `vms.yml`, `site.yml`, `stop.yml` | US-02 |
+| `project-atmos-onprem-jenkins` | CI: image build and tagging, publishing images to the Nexus registry | `Jenkinsfile` | US-03 |
+| `project-atmos-onprem-k3s` | Everything that runs inside the cluster | `charts/atmos/` (application, Ingress, NetworkPolicy), Kubernetes manifests, `flux-system/`, image automation, `monitoring/` | US-04, US-05, US-06 |
+
+The split follows one rule: a change to a server goes to `project-atmos-onprem-ansible`, a change to the build goes to `project-atmos-onprem-jenkins`, a change to what runs in the cluster goes to `project-atmos-onprem-k3s`. Note that k3s itself is installed by Ansible (`roles/k3s/` in `project-atmos-onprem-ansible`); `project-atmos-onprem-k3s` holds only the workloads of the cluster.
+
+Each user story has its issue in the repository where most of its work happens (column **User stories**). Some stories also change `project-atmos-onprem-ansible`:
+
+- US-03 adds the `docker`, `nexus`, `jenkins` and `traefik` roles;
+- US-04 adds the `k3s` role (k3s install, `HelmChartConfig` for Traefik, `registries.yaml`);
+- US-06 adds the firewall rule for port 9100 and the `grafana.atmos.lan` hosts entry.
+
+The project board collects the issues from all four repositories.
 
 The Jenkins job is "Pipeline script from SCM" pointing to `project-atmos-onprem-jenkins`. The `Jenkinsfile` checks out `project-atmos-dev` (branch `develop`) with a read-only deploy key.
 

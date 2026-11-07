@@ -18,9 +18,11 @@ The `main` branch contains stable code. The `develop` branch integrates changes 
 | `fix/*` | Bug fixes | `develop` | `develop` |
 | `release/*` | Optional release stabilization | `develop` | `main` |
 
+The on-premise platform has one environment. Jenkins builds only `develop`, and Flux deploys these builds. `main` is not built on-premise.
+
 ### On-premise platform repositories
 
-`project-atmos-onprem-jenkins`, `project-atmos-onprem-provision` and `project-atmos-onprem-gitops` use a shorter model:
+`project-atmos-onprem-ansible`, `project-atmos-onprem-jenkins` and `project-atmos-onprem-k3s` use a shorter model:
 
 | Branch | Purpose | Source | Target |
 |---|---|---|---|
@@ -30,7 +32,7 @@ The `main` branch contains stable code. The `develop` branch integrates changes 
 
 There is no `develop` branch: there is one on-premise environment, and the state of `main` is the state of the platform.
 
-Flux commits image tag updates directly to `main` of `project-atmos-onprem-gitops`. These commits do not go through Pull Requests.
+Flux commits image tag updates directly to `main` of `project-atmos-onprem-k3s`. These commits do not go through Pull Requests.
 
 ## 3. Development Workflow
 

@@ -19,6 +19,14 @@ Project Atmos requires an on-premise CI/CD process that:
 
 The `Jenkinsfile` lives in `project-atmos-onprem-jenkins`. The Jenkins job reads it from that repository; the `Jenkinsfile` checks out `project-atmos-dev` (branch `develop`) with a read-only deploy key. Builds start by SCM polling, because GitHub webhooks cannot reach the home network.
 
+Each part lives in its own repository:
+
+| Part | Repository |
+|---|---|
+| Install Docker, Nexus, Jenkins, Traefik; admin passwords in Ansible Vault | `project-atmos-onprem-ansible` (`roles/docker/`, `roles/nexus/`, `roles/jenkins/`, `roles/traefik/`) |
+| CI pipeline: lint, tests, image build, tagging, push to Nexus | `project-atmos-onprem-jenkins` (`Jenkinsfile`) |
+| CD: Flux, image automation, Helm chart | `project-atmos-onprem-k3s` (`flux-system/`, `charts/atmos/`) |
+
 ```text
 Commit to develop
  ↓
@@ -28,12 +36,12 @@ Push to Nexus: <build>-<short-sha>
  ↓
 Flux sees the new tag in Nexus
  ↓
-Flux commits the tag to project-atmos-onprem-gitops
+Flux commits the tag to project-atmos-onprem-k3s
  ↓
 Flux upgrades the Helm release in the cluster
 ```
 
-Jenkins does CI. Flux does CD. Jenkins has no kubeconfig and no access to the gitops repository.
+Jenkins does CI. Flux does CD. Jenkins has no kubeconfig and no access to `project-atmos-onprem-k3s`.
 
 ### Image tags
 
@@ -42,7 +50,9 @@ nexus.atmos.lan:5000/project-atmos-backend:<build>-<short-sha>
 nexus.atmos.lan:5000/project-atmos-frontend:<build>-<short-sha>
 ```
 
-Example: `42-a1b2c3d`. The build number gives Flux a numeric order to select the newest image. The SHA identifies the commit.
+Example: `42-a1b2c3d`. The build number gives Flux a numeric order to select the newest image (numerical image policy). The SHA identifies the commit.
+
+Flux writes the new tag into `spec.values` of the HelmRelease. The tag is not kept in `charts/atmos/values.yaml`, because Flux applies a change inside the chart only when the chart version changes.
 
 ### Access
 
@@ -50,11 +60,11 @@ Example: `42-a1b2c3d`. The build number gives Flux a numeric order to select the
 |---|---|
 | Jenkins | read `project-atmos-dev`; push to Nexus |
 | Cluster nodes and Flux | pull from Nexus |
-| Flux | read and write `project-atmos-onprem-gitops` only (deploy key) |
+| Flux | read and write `project-atmos-onprem-k3s` only (deploy key) |
 
 ### Rollback
 
-Suspend the image update automation, revert the tag commit in the gitops repository, and resume the automation after the fix. Without the suspend, Flux would select the newest image again.
+Suspend the image update automation, revert the tag commit in `project-atmos-onprem-k3s`, and resume the automation after the fix. Without the suspend, Flux would select the newest image again.
 
 ## Alternatives
 
@@ -67,8 +77,8 @@ Suspend the image update automation, revert the tag commit in the gitops reposit
 
 ## Why
 
-- **Separation of duties:** a compromised Jenkins can push images but cannot change the cluster.
-- **Git is the source of truth:** the deployed version is a commit in the gitops repository, so it can be reviewed and rolled back with Git.
+- **Separation of duties:** a compromised Jenkins cannot change the cluster configuration or read the cluster Secrets. It can still push an image that Flux deploys; the image is rolled back with Git.
+- **Git is the source of truth:** the deployed version is a commit in `project-atmos-onprem-k3s`, so it can be reviewed and rolled back with Git.
 - **Everything stays local:** images are built, stored and pulled inside the home network.
 - **Shared application repository:** no on-premise files in `project-atmos-dev`.
 
@@ -78,6 +88,8 @@ Suspend the image update automation, revert the tag commit in the gitops reposit
 - **Positive:** the cluster pulls its state; no inbound access from CI to the cluster.
 - **Trade-off:** a build starts up to one polling interval after the commit.
 - **Trade-off:** the registry uses a self-signed certificate. The CA must be trusted by Docker on `tools`, by k3s on the nodes and by Flux.
-- **Trade-off:** Flux has a deploy key with write access to the gitops repository. It is limited to that one repository.
+- **Trade-off:** Flux has a deploy key with write access to `project-atmos-onprem-k3s`. It is limited to that one repository.
 - **Trade-off:** a rollback needs two steps (suspend automation, revert).
+- **Trade-off:** Jenkins builds with the Docker socket of `tools`, which gives it root rights on `tools`. Jenkins is reachable only through Traefik from the home network.
+- **Trade-off:** the build number is part of the tag. If Jenkins starts counting from 1 again while Nexus keeps higher tags, Flux does not deploy the new builds. Jenkins and Nexus are rebuilt together.
 - **Trade-off:** two repositories must stay in sync: the `Jenkinsfile` depends on the paths and Dockerfiles in `project-atmos-dev`.

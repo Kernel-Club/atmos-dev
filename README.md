@@ -176,4 +176,12 @@ Images: `<DOCKERHUB_NAMESPACE>/<PROJECT_NAME>-backend` and `-frontend`. The k8s 
 
 ### On-premise: Jenkins
 
-Jenkins polls `develop` of this repository. The `Jenkinsfile` lives in `project-atmos-onprem-jenkins`, not here. Images go to Nexus and Flux deploys them. See [docs/on-premise](docs/on-premise/architecture.md).
+Jenkins polls `develop` of this repository. This repository has no on-premise files except the documentation in `docs/on-premise/`. The platform lives in three repositories:
+
+| Repository | Responsibility |
+|---|---|
+| `project-atmos-onprem-ansible` | Creates and configures the servers: VMs, base system, Docker, Nexus, Jenkins, Traefik, k3s |
+| `project-atmos-onprem-jenkins` | `Jenkinsfile`: lint, tests, image build, tag `<build>-<short-sha>`, push to Nexus |
+| `project-atmos-onprem-k3s` | Everything inside the cluster: Helm chart, Flux GitOps, monitoring |
+
+Flux deploys the new images from Nexus to the cluster. See [docs/on-premise](docs/on-premise/architecture.md).

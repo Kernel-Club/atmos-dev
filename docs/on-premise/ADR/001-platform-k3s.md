@@ -1,4 +1,4 @@
-# ADR-001: Platform - k3s on VirtualBox VMs created by Ansible
+# ADR-001: Platform - k3s on VirtualBox VMs created by Vagrant
 
 ## Context
 
@@ -12,7 +12,7 @@ Project Atmos needs an on-premise Kubernetes platform that:
 
 ## Decision
 
-We choose **k3s** on **three VirtualBox VMs** (Ubuntu Server 24.04 LTS). **Ansible** creates the VMs and configures them. It runs in WSL2 on the host and uses `VBoxManage` for host tasks and SSH for the servers.
+We choose **k3s** on **three VirtualBox VMs** (Ubuntu Server 24.04 LTS). **Vagrant** creates the VMs from one declarative `Vagrantfile`. **Ansible** configures them over SSH. Both run in WSL2 on the host; Vagrant controls VirtualBox on Windows.
 
 | VM | Role |
 |---|---|
@@ -20,10 +20,10 @@ We choose **k3s** on **three VirtualBox VMs** (Ubuntu Server 24.04 LTS). **Ansib
 | `k8s-cp` | k3s server (control plane) |
 | `k8s-w1` | k3s agent (worker) |
 
-- `vms.yml` creates the VMs (unattended OS install with the admin SSH key) and starts them. It skips VMs that already exist.
+- `Vagrantfile` describes the VMs (box, CPU, RAM, disk, network, admin SSH key). `vagrant up` creates the VMs that do not exist and starts them; it changes only what differs from the file. The box version is pinned.
 - `site.yml` configures all servers, installs the CI tools and k3s. Versions are pinned in `group_vars/`.
-- `stop.yml` stops the servers safely.
-- A `clean` snapshot of each VM after the base configuration allows a fast rebuild.
+- `vagrant halt` stops the servers safely.
+- A `clean` snapshot of each VM (`vagrant snapshot save`) after the base configuration allows a fast rebuild.
 
 CI tools run on a separate VM, outside the cluster, so a broken cluster does not stop builds and Jenkins does not compete with the application for node RAM.
 
@@ -33,7 +33,7 @@ CI tools run on a separate VM, outside the cluster, so a broken cluster does not
 - **kubeadm:** full upstream Kubernetes, but the control plane alone needs more RAM, and setup and upgrades take much more work.
 - **MicroK8s:** comparable, but tied to snap packages; k3s is a single binary and simpler to install with Ansible.
 - **One big VM:** less overhead, but no real node separation and no practice with a multi-node cluster.
-- **Vagrant for the VMs:** made for this task, but it is one more tool. Ansible with `VBoxManage` keeps creation and configuration in one tool and one repository.
+- **Ansible with `VBoxManage` for the VMs:** one tool less, but imperative: every step (create the VM, attach the disk, unattended OS install, check if the VM already exists) must be written and tested by hand. Vagrant gives the same result from one declarative file, and the `Vagrantfile` stays in the same repository as the Ansible code.
 - **VMs created by hand:** simple, but a rebuild needs manual steps and the result can differ.
 
 ## Why
@@ -52,4 +52,4 @@ CI tools run on a separate VM, outside the cluster, so a broken cluster does not
 - **Trade-off:** one control plane node. If `k8s-cp` is down, running pods continue, but nothing can be changed or rescheduled.
 - **Trade-off:** local-path storage keeps MongoDB data on the disk of one node. The pod cannot move to another node, and the data is lost if the disk is lost.
 - **Trade-off:** WSL2 needs Hyper-V, so VirtualBox runs on top of Hyper-V. The servers are slower than with VirtualBox alone. This is checked with the first server in US-02.
-- **Trade-off:** Ansible runs in WSL2 and calls Windows programs (`VBoxManage.exe`, the Windows hosts file). This needs care with paths and administrator rights.
+- **Trade-off:** Vagrant runs in WSL2 and controls VirtualBox on Windows. This needs extra settings: `VAGRANT_WSL_ENABLE_WINDOWS_ACCESS=1`, the project folder on the Windows disk (`/mnt/c/...`), the default synced folder turned off, and the admin SSH key kept in the WSL2 home folder (key files on `/mnt/c` get wrong permissions). Ansible also changes the Windows hosts file, which needs administrator rights.

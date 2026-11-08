@@ -4,7 +4,7 @@
 
 The Project Atmos application (React, FastAPI, MongoDB, Redis) runs in Kubernetes on three virtual machines on one personal PC. No cloud services are used. GitHub is the only external service: it stores the code and the platform configuration.
 
-- **Ansible** creates the virtual machines and configures everything inside them.
+- **Vagrant** creates the virtual machines; **Ansible** configures everything inside them.
 - **Jenkins** checks and builds the application and stores the images in **Nexus**.
 - **Flux** deploys the new images to the **k3s** cluster from Git.
 - **Traefik** is the entry point: the ingress controller of the cluster and the reverse proxy for the tools.
@@ -15,7 +15,7 @@ The application code is the same as in the cloud version (`project-atmos-dev`). 
 ```mermaid
 flowchart LR
     subgraph host["Host PC: Windows 11 + VirtualBox"]
-        admin["Admin machine<br/>WSL2: Ansible, kubectl, flux<br/>Windows: browser"]
+        admin["Admin machine<br/>WSL2: Vagrant, Ansible, kubectl, flux<br/>Windows: browser"]
         subgraph tools["VM tools"]
             tTraefik["Traefik<br/>HTTPS entry point"]
             jenkins["Jenkins"]
@@ -30,9 +30,9 @@ flowchart LR
     end
     github["GitHub<br/>project-atmos-dev<br/>project-atmos-onprem-ansible<br/>project-atmos-onprem-jenkins<br/>project-atmos-onprem-k3s"]
 
-    admin -- "VBoxManage, SSH" --> tools
-    admin -- "VBoxManage, SSH" --> cp
-    admin -- "VBoxManage, SSH" --> w1
+    admin -- "Vagrant, SSH" --> tools
+    admin -- "Vagrant, SSH" --> cp
+    admin -- "Vagrant, SSH" --> w1
     admin -- "kubectl" --> cp
     admin -- "browser" --> tTraefik
     admin -- "browser" --> pods
@@ -51,9 +51,9 @@ flowchart LR
 
 **Host:** Windows 11 Pro, Intel i5-12100F (4 cores / 8 threads), 16 GB RAM, 500 GB disk. Hypervisor: VirtualBox.
 
-**Admin machine:** the host itself. Ansible, `kubectl` and the Flux CLI run in WSL2 (Ubuntu); Ansible calls `VBoxManage.exe` for host tasks (`localhost` in the inventory). The browser runs in Windows. Installing VirtualBox, WSL2 and Ansible is the only manual step.
+**Admin machine:** the host itself. Vagrant, Ansible, `kubectl` and the Flux CLI run in WSL2 (Ubuntu). Vagrant controls VirtualBox on Windows (`VAGRANT_WSL_ENABLE_WINDOWS_ACCESS=1`, project folder on the Windows disk). Ansible runs host tasks, such as the Windows hosts file, on `localhost` in the inventory. The browser runs in Windows. Installing VirtualBox, WSL2, Vagrant and Ansible is the only manual step.
 
-**Servers:** Ubuntu Server 24.04 LTS (image version and checksum pinned). Ansible creates them with `VBoxManage` (unattended install with the admin SSH key) and configures them. After the base configuration, each server gets a `clean` snapshot for a fast rebuild.
+**Servers:** Ubuntu Server 24.04 LTS from a Vagrant box (`bento/ubuntu-24.04`, box version pinned). Vagrant creates them from the `Vagrantfile` and adds the admin SSH key; Ansible configures them. After the base configuration, each server gets a `clean` snapshot for a fast rebuild.
 
 | Server | Role | Runs |
 |---|---|---|
@@ -68,12 +68,12 @@ Jenkins, Nexus and Traefik on `tools` run as Docker containers with a memory lim
 Jenkins builds the images with the Docker Engine of `tools` through the mounted Docker socket. It runs one build at a time (one executor), so a build fits into the RAM budget.
 
 **Start and stop:**
-- `vms.yml` creates the servers that do not exist and starts them in the order `tools`, `k8s-cp`, `k8s-w1`.
-- `stop.yml` stops them safely in the order `k8s-w1`, `k8s-cp`, `tools`.
+- `vagrant up` creates the servers that do not exist and starts them in the order `tools`, `k8s-cp`, `k8s-w1` (the order in the `Vagrantfile`).
+- `vagrant halt k8s-w1 k8s-cp tools` stops them safely in this order.
 - When the servers are stopped, nothing runs on the host. Stop them before games, Windows updates or sleep.
 
 **Rebuild:**
-- **Whole platform:** restore the `clean` snapshots (or recreate the servers with `vms.yml`) and run `site.yml`. Then do the manual steps, because secrets are not stored in Git and Jenkins configuration as code is out of scope:
+- **Whole platform:** restore the `clean` snapshots (`vagrant snapshot restore`), or recreate the servers with `vagrant destroy` and `vagrant up`, and run `site.yml`. Then do the manual steps, because secrets are not stored in Git and Jenkins configuration as code is out of scope:
   1. In Jenkins, add the deploy key and the registry credentials and create the Pipeline job.
   2. Start one Jenkins build. Nexus is empty after a rebuild, so the application cannot start before the first images exist.
   3. Bootstrap Flux with a new short-lived token.
@@ -144,8 +144,8 @@ The numbers are planned values. Real use is compared with this budget in Grafana
 
 ## 4. Network
 
-- The home network is `192.168.1.0/24`. Each server has one bridged adapter, so it is a normal device in the home network.
-- Fixed addresses (netplan), outside the router DHCP range. SSH only with keys, only from the admin machine.
+- The home network is `192.168.1.0/24`. Each server has a bridged adapter, so it is a normal device in the home network. It also has a NAT adapter, which Vagrant needs for its own SSH access (`vagrant ssh`, `vagrant halt`).
+- Fixed addresses on the bridged adapter, set by Vagrant (`public_network` with `ip`), outside the router DHCP range. SSH only with keys, only from the admin machine; `ufw` also allows SSH on the NAT adapter, otherwise `vagrant halt` cannot stop the server safely.
 - The host PC also needs a fixed address (DHCP reservation in the router): `ufw` allows SSH and the Kubernetes API only from this address. Traffic from WSL2 reaches the servers with the address of the host.
 - No DNS server. Ansible writes the names to the hosts files:
   - Windows hosts file: all `*.atmos.lan` names (for the browser);
@@ -173,7 +173,7 @@ The numbers are planned values. Real use is compared with this budget in Grafana
 - Ports that Docker publishes in the normal way are not filtered by `ufw`: Docker adds its own `iptables` rules before the `ufw` rules. Because Traefik uses the host network, its ports 80, 443 and 5000 are real host ports, and the `ufw` rules above apply to them.
 - The k3s load balancer (ServiceLB) publishes the cluster Traefik on ports 80/443 of both nodes. The names point to `k8s-w1`.
 - In the cluster, NetworkPolicy allows MongoDB and Redis to accept traffic only from the backend.
-- The addresses are examples. The real addresses are set in the Ansible inventory.
+- The addresses are examples. The real addresses are set in the `Vagrantfile` and in the Ansible inventory, and must be the same in both.
 
 ```mermaid
 flowchart LR
@@ -213,7 +213,7 @@ flowchart LR
 
 | Area | Tool | Where |
 |---|---|---|
-| Server creation | Ansible + `VBoxManage` | admin machine → VirtualBox |
+| Server creation | Vagrant (`Vagrantfile`, pinned box version) | admin machine → VirtualBox |
 | Server configuration | Ansible, versions pinned in `group_vars/` | admin machine → servers |
 | Kubernetes | k3s (pinned version) | `k8s-cp`, `k8s-w1` |
 | Ingress | Traefik bundled with k3s, memory limits in a `HelmChartConfig` | cluster |
@@ -295,7 +295,7 @@ sequenceDiagram
 | Repository | Responsibility | Main content | User stories |
 |---|---|---|---|
 | `project-atmos-dev` | Application source, shared with the cloud version, and the on-premise documentation; nothing on-premise specific except the docs | application code, Dockerfiles, `docs/on-premise/` | US-01, US-07 |
-| `project-atmos-onprem-ansible` | Everything that creates and configures the servers | `inventory/`, `group_vars/` (versions, Ansible Vault), `roles/` (`virtualbox_vm`, `common`, `docker`, `nexus`, `jenkins`, `traefik`, `k3s`), `vms.yml`, `site.yml`, `stop.yml` | US-02 |
+| `project-atmos-onprem-ansible` | Everything that creates and configures the servers | `Vagrantfile`, `inventory/`, `group_vars/` (versions, Ansible Vault), `roles/` (`common`, `docker`, `nexus`, `jenkins`, `traefik`, `k3s`), `site.yml` | US-02 |
 | `project-atmos-onprem-jenkins` | CI: image build and tagging, publishing images to the Nexus registry | `Jenkinsfile` | US-03 |
 | `project-atmos-onprem-k3s` | Everything that runs inside the cluster | `charts/atmos/` (application, Ingress, NetworkPolicy), Kubernetes manifests, `flux-system/`, image automation, `monitoring/` | US-04, US-05, US-06 |
 

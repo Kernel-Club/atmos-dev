@@ -111,7 +111,7 @@ The servers are idle most of the time; only builds use a lot of CPU for a short 
 
 Every pod has a memory request and limit and a CPU request (no CPU limits), because the scheduler places pods by their requests. MongoDB and Prometheus are pinned to `k8s-w1` (`nodeSelector`), because local-path keeps their data on one node. Node disks: OS 10 GB, images 10–20 GB, volumes on `k8s-w1` 10 GB (MongoDB 5, Prometheus 5), the rest is free.
 
-**Review after one week in Grafana (US-06):** if Jenkins is killed by OOM, move 0.5 GB from `k8s-w1` to `jenkins`; if `k8s-w1` always has more than 1 GB free, give it to another server; if the Nexus blob store grows, keep only the last N tags (cleanup policy).
+**Review after one week in Grafana:** if Jenkins is killed by OOM, move 0.5 GB from `k8s-w1` to `jenkins`; if `k8s-w1` always has more than 1 GB free, give it to another server; if the Nexus blob store grows, keep only the last N tags (cleanup policy).
 
 ## 4. Network
 
@@ -208,12 +208,12 @@ Nexus has separate users: Jenkins can push; the cluster and Flux can only pull. 
 
 ## 7. Repositories
 
-| Repository | Responsibility | Main content | User stories |
-|---|---|---|---|
-| `atmos-dev` | Application, shared with the cloud version; on-premise docs | application code, Dockerfiles, `docs/on-premise/` | US-01, US-07 |
-| `atmos-ansible` | Creates and configures the servers, installs k3s | `Vagrantfile`, `inventory/`, `group_vars/`, `roles/`, `site.yml` | US-02 |
-| `atmos-jenkins` | CI: build, tag, push to Nexus | `Jenkinsfile` | US-03 |
-| `atmos-k8s` | Everything that runs inside the cluster | `charts/atmos/`, `flux-system/`, image automation, `monitoring/` | US-04, US-05, US-06 |
+| Repository | Responsibility | Main content |
+|---|---|---|
+| `atmos-dev` | Application, shared with the cloud version; on-premise docs | application code, Dockerfiles, `docs/on-premise/` |
+| `atmos-ansible` | Creates and configures the servers, installs k3s | `Vagrantfile`, `inventory/`, `group_vars/`, `roles/`, `site.yml` |
+| `atmos-jenkins` | CI: build, tag, push to Nexus | `Jenkinsfile` |
+| `atmos-k8s` | Everything that runs inside the cluster | `charts/atmos/`, `flux-system/`, image automation, `monitoring/` |
 
 | Ansible role | Servers |
 |---|---|
@@ -224,7 +224,5 @@ Nexus has separate users: Jenkins can push; the cluster and Flux can only pull. 
 | `k3s` (install, `HelmChartConfig`, `registries.yaml`) | `k8s-cp`, `k8s-w1` |
 
 Rule: a change to a server goes to `atmos-ansible`, a change to the build to `atmos-jenkins`, a change to what runs in the cluster to `atmos-k8s`. k3s itself is installed by Ansible; `atmos-k8s` holds only the workloads.
-
-Each user story has its issue in its main repository. US-03 (roles `docker`, `nexus`, `traefik`, `jenkins`), US-04 (role `k3s`) and US-06 (port 9100, `grafana.atmos.lan` entry) also change `atmos-ansible`. The project board collects the issues from all four repositories.
 
 The Jenkins job is "Pipeline script from SCM" pointing to `atmos-jenkins`; the `Jenkinsfile` checks out `develop` of `atmos-dev` with a read-only deploy key. See also [branching-model.md](branching-model.md) and [risks.md](risks.md).

@@ -1,16 +1,20 @@
-# Project Atmos — Architecture
+# Atmos — Cloud Architecture
+
+> [!WARNING]
+> **Not maintained, but working.** The cloud phase of Atmos (AWS EKS) was finished on 2026-11-04. The cloud solution is no longer developed, but its code still works and can deploy the cloud infrastructure again: see `Deploy again` in [`DEPRECATED-atmos-iac`](https://github.com/Kernel-Club/DEPRECATED-atmos-iac) and [`DEPRECATED-atmos-k8s`](https://github.com/Kernel-Club/DEPRECATED-atmos-k8s).
+> Names such as `project-atmos-*` and `project_atmos` in the code, on Docker Hub and in AWS are legacy names and are kept on purpose. The CI-Delivery workflow still sends its trigger to the legacy name `project-atmos-k8s`; GitHub redirects it to `DEPRECATED-atmos-k8s`.
 
 ## 1. Overview
 
-Project Atmos is a weather application running locally with Docker Compose and in AWS on Kubernetes.
+Atmos is a weather application running locally with Docker Compose and in AWS on Kubernetes.
 
 The project consists of three repositories:
 
 | Repository | Responsibility |
 |---|---|
-| `project-atmos-dev` | Application, Docker, Compose, CI, image delivery |
-| `project-atmos-k8s` | Kubernetes configuration and deployment (CDeployment) |
-| `project-atmos-iac` | AWS infrastructure with Terraform |
+| `atmos-dev` | Application, Docker, Compose, CI, image delivery |
+| `DEPRECATED-atmos-k8s` | Kubernetes configuration and deployment (CDeployment) |
+| `DEPRECATED-atmos-iac` | AWS infrastructure with Terraform |
 
 ---
 
@@ -179,7 +183,7 @@ Outbound traffic from the cluster to the OpenWeather API goes through **Kubernet
 
 The process is split between two repositories.
 
-### CI-Delivery (`project-atmos-dev`, `ci-delivery.yml`)
+### CI-Delivery (`atmos-dev`, `ci-delivery.yml`)
 
 One workflow, one run, on pushes and Pull Requests to `main` and `develop`:
 
@@ -195,12 +199,12 @@ Images use tags with the application version and the first 6 characters of the G
 <service>:v1.0.0-<sha6>
 ```
 
-The trigger is a `repository_dispatch` event (`deploy`, payload `image_tag`) sent to `project-atmos-k8s`. The workflow ends there.
+The trigger is a `repository_dispatch` event (`deploy`, payload `image_tag`) sent to `DEPRECATED-atmos-k8s`. The workflow ends there.
 
-### CDeployment (`project-atmos-k8s`, planned)
+### CDeployment (`DEPRECATED-atmos-k8s`, planned)
 
 ```text
-Triggered by project-atmos-dev
+Triggered by atmos-dev
   ↓
 Pull image from Docker Hub
   ↓

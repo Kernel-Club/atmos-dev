@@ -2,7 +2,7 @@
 
 ## Context
 
-Project Atmos requires a frontend application that:
+Atmos requires a frontend application that:
 
 - provides the user interface for the weather application;
 - communicates with the backend HTTP API;

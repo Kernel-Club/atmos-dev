@@ -1,8 +1,8 @@
-# Branching Model — Project Atmos
+# Branching Model — Atmos
 
 ## 1. Overview
 
-Project Atmos uses a branch-based development workflow to separate feature development, integration, and production releases.
+Atmos uses a branch-based development workflow to separate feature development, integration, and production releases.
 
 The `main` branch contains stable production-ready code. The `develop` branch integrates changes before they are promoted to production.
 
@@ -51,7 +51,7 @@ The pipeline is one workflow, `ci-delivery.yml`:
 - Linting (Ruff for the backend, oxlint for the frontend).
 - Backend tests with pytest.
 - Docker image build.
-- Tagging, publication to Docker Hub, and the trigger of the deployment pipeline in `project-atmos-k8s` (`develop` only).
+- Tagging, publication to Docker Hub, and the trigger of the deployment pipeline in `DEPRECATED-atmos-k8s` (`develop` only).
 
 Image tags contain the application version and the first 6 characters of the Git commit SHA:
 
@@ -63,14 +63,14 @@ Pull Requests and pushes to `main` build the images but do not publish them or t
 ## 5. Release Workflow
 
 1. Changes are integrated into `develop` through a Pull Request with passing CI.
-2. After the merge, the pipeline runs on `develop`. On success, it publishes the images and triggers the pipeline in `project-atmos-k8s`.
-3. The deployment pipeline in `project-atmos-k8s` validates the image and deploys it to DEV.
+2. After the merge, the pipeline runs on `develop`. On success, it publishes the images and triggers the pipeline in `DEPRECATED-atmos-k8s`.
+3. The deployment pipeline in `DEPRECATED-atmos-k8s` validates the image and deploys it to DEV.
 4. After validation in DEV, a Pull Request is opened from `develop` to `main` to record the release. CI checks must pass.
 5. The Pull Request is reviewed and merged.
 
 Application changes are not committed directly to `main`, because images are published only from `develop`. Urgent fixes follow the same path through a `fix/*` branch and `develop`.
 
-Rules for PROD deployment belong to the deployment pipeline in `project-atmos-k8s` and are not defined in this repository.
+Rules for PROD deployment belong to the deployment pipeline in `DEPRECATED-atmos-k8s` and are not defined in this repository.
 
 ## 6. Release Branches and Versioning
 
@@ -101,15 +101,15 @@ Pull Requests and successful CI checks are the standard requirements for integra
 | DEV | `develop` | Integration and development validation |
 | PROD | `main` (release record) | Stable production releases |
 
-This repository only publishes images. Deployment to the DEV and PROD namespaces is performed by the pipeline in `project-atmos-k8s`.
+This repository only publishes images. Deployment to the DEV and PROD namespaces is performed by the pipeline in `DEPRECATED-atmos-k8s`.
 
-The deployment infrastructure is maintained separately in the `project-atmos-k8s` and `project-atmos-iac` repositories.
+The deployment infrastructure is maintained separately in the `DEPRECATED-atmos-k8s` and `DEPRECATED-atmos-iac` repositories.
 
 ## 10. Repository Responsibilities
 
-- `project-atmos-dev`: application source, Dockerfiles, and the CI-Delivery pipeline (checks, build, tag, push, trigger).
-- `project-atmos-k8s`: Kubernetes configuration and the deployment pipeline.
-- `project-atmos-iac`: Terraform configuration and AWS infrastructure provisioning.
+- `atmos-dev`: application source, Dockerfiles, and the CI-Delivery pipeline (checks, build, tag, push, trigger).
+- `DEPRECATED-atmos-k8s`: Kubernetes configuration and the deployment pipeline.
+- `DEPRECATED-atmos-iac`: Terraform configuration and AWS infrastructure provisioning.
 
 This separation keeps application development, deployment configuration, and cloud infrastructure independently maintainable.
 
@@ -124,7 +124,7 @@ flowchart TD
     CI_D --> BLD_D["Build images"]
     BLD_D --> CD_D["Tag, Push to Docker Hub"]
     CD_D --> IMG_D["Docker images: v1.0.0-sha6"]
-    IMG_D --> TRG["Trigger project-atmos-k8s pipeline"]
+    IMG_D --> TRG["Trigger DEPRECATED-atmos-k8s pipeline"]
     TRG --> DEV["Deployment to DEV (k8s repo)"]
     DEV --> PROD["Validated in DEV"]
 

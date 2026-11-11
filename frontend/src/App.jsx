@@ -202,7 +202,6 @@ function App() {
             </div>
 
             <div className="brand-name">
-              <span>Project</span>
               <strong>Atmos</strong>
             </div>
           </div>

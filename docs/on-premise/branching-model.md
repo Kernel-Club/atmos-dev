@@ -1,14 +1,14 @@
-# Branching Model — Project Atmos On-Premise
+# Branching Model — Atmos On-Premise
 
 ## 1. Overview
 
-The application repository `project-atmos-dev` is shared by the cloud and the on-premise versions. It uses one branching model for both platforms.
+The application repository `atmos-dev` is shared by the cloud and the on-premise versions. It uses one branching model for both platforms.
 
 The `main` branch contains stable code. The `develop` branch integrates changes before they are promoted to `main`.
 
 ## 2. Branch Structure
 
-### Application repository (`project-atmos-dev`)
+### Application repository (`atmos-dev`)
 
 | Branch | Purpose | Source | Target |
 |---|---|---|---|
@@ -22,7 +22,7 @@ The on-premise platform has one environment. Jenkins builds only `develop`, and 
 
 ### On-premise platform repositories
 
-`project-atmos-onprem-ansible`, `project-atmos-onprem-jenkins` and `project-atmos-onprem-k3s` use a shorter model:
+`atmos-ansible`, `atmos-jenkins` and `atmos-k8s` use a shorter model:
 
 | Branch | Purpose | Source | Target |
 |---|---|---|---|
@@ -32,7 +32,7 @@ The on-premise platform has one environment. Jenkins builds only `develop`, and 
 
 There is no `develop` branch: there is one on-premise environment, and the state of `main` is the state of the platform.
 
-Flux commits image tag updates directly to `main` of `project-atmos-onprem-k3s`. These commits do not go through Pull Requests.
+Flux commits image tag updates directly to `main` of `atmos-k8s`. These commits do not go through Pull Requests.
 
 ## 3. Development Workflow
 

@@ -1,4 +1,4 @@
-# Project Atmos
+# Atmos
 
 Weather web application built with **React, FastAPI, MongoDB, and Redis**.
 
@@ -50,7 +50,7 @@ No local Python, Node.js, MongoDB, or Redis installation is required.
 
 ```bash
 git clone <repository-url>
-cd project-atmos-dev
+cd atmos-dev
 ```
 
 ### 2. Get an OpenWeather API key
@@ -162,11 +162,14 @@ Each platform has its own pipeline. This repository contains only the applicatio
 
 ### Cloud: GitHub Actions
 
+> [!WARNING]
+> **The cloud version is not maintained, but it still works.** The cloud phase (AWS EKS) was finished on 2026-11-04. Its infrastructure and deploy code live in [`DEPRECATED-atmos-iac`](https://github.com/Kernel-Club/DEPRECATED-atmos-iac) and [`DEPRECATED-atmos-k8s`](https://github.com/Kernel-Club/DEPRECATED-atmos-k8s); their READMEs explain how to deploy it again.
+
 > **The workflow is started only by hand** (Actions → CI-Delivery → Run workflow). Push and pull request triggers are disabled because the cloud environment is not always running.
 
 The workflow `.github/workflows/ci-delivery.yml` runs lint, tests and a build of both images.
 
-On `develop` it also tags the images (`v1.0.0-<commit>`), pushes them to Docker Hub and starts the deploy pipeline in `project-atmos-k8s`.
+On `develop` it also tags the images (`v1.0.0-<commit>`), pushes them to Docker Hub and starts the deploy pipeline in the cloud k8s repository `DEPRECATED-atmos-k8s`.
 
 Settings come from GitHub, nothing is written in the workflow:
 - organization variables: `PROJECT_NAME`, `DOCKERHUB_NAMESPACE`
@@ -174,14 +177,16 @@ Settings come from GitHub, nothing is written in the workflow:
 
 Images: `<DOCKERHUB_NAMESPACE>/<PROJECT_NAME>-backend` and `-frontend`. The k8s repository is `<owner>/<PROJECT_NAME>-k8s`.
 
+> `PROJECT_NAME` keeps the legacy value `project-atmos` on purpose: it also names the Docker Hub images and the AWS resources. The dispatch therefore goes to the legacy name `project-atmos-k8s`, which GitHub redirects to `DEPRECATED-atmos-k8s`. If the deploy pipeline does not start, run it by hand in `DEPRECATED-atmos-k8s` (Actions → Run workflow, input `image_tag`).
+
 ### On-premise: Jenkins
 
 Jenkins polls `develop` of this repository. This repository has no on-premise files except the documentation in `docs/on-premise/`. The platform lives in three repositories:
 
 | Repository | Responsibility |
 |---|---|
-| `project-atmos-onprem-ansible` | Creates and configures the servers: VMs, base system, Docker, Nexus, Jenkins, Traefik, k3s |
-| `project-atmos-onprem-jenkins` | `Jenkinsfile`: lint, tests, image build, tag `<build>-<short-sha>`, push to Nexus |
-| `project-atmos-onprem-k3s` | Everything inside the cluster: Helm chart, Flux GitOps, monitoring |
+| `atmos-ansible` | Creates and configures the four servers (`nexus-traefik`, `jenkins`, `k8s-cp`, `k8s-w1`): VMs, base system, Docker, Nexus, Traefik, Jenkins, k3s |
+| `atmos-jenkins` | `Jenkinsfile`: lint, tests, image build, tag `<build>-<short-sha>`, push to Nexus |
+| `atmos-k8s` | Everything inside the cluster: Helm chart, Flux GitOps, monitoring |
 
 Flux deploys the new images from Nexus to the cluster. See [docs/on-premise](docs/on-premise/architecture.md).

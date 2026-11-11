@@ -1,4 +1,4 @@
-# Project Atmos — Risks
+# Atmos — Risks
 
 | Risk | Impact | Mitigation |
 |---|---|---|

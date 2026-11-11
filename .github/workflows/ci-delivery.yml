@@ -1,21 +1,21 @@
 name: CI-Delivery
 
-# 🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴
-# 🔴  !!! MANUAL START ONLY: THE WHOLE PIPELINE RUNS ONLY BY HAND !!!
-# 🔴
-# 🔴  This repository is shared by two platforms:
-# 🔴    - cloud:   GitHub Actions (this file) -> Docker Hub -> project-atmos-k8s
-# 🔴    - on-prem: Jenkins (project-atmos-onprem-jenkins) -> Nexus -> Flux
-# 🔴
-# 🔴  The cloud environment is destroyed when not in use, so push and
-# 🔴  pull_request triggers are DISABLED. Nothing in this file starts
-# 🔴  automatically: no lint, no tests, no build, no delivery.
-# 🔴
-# 🔴  Start it by hand: Actions -> CI-Delivery -> Run workflow (pick a branch).
-# 🔴  Delivery (push to Docker Hub + trigger k8s) runs only on develop.
-# 🔴
-# 🔴  To turn automatic runs back on: uncomment push / pull_request below.
-# 🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴
+# ================================= WARNING ===================================
+# MANUAL START ONLY. The whole pipeline runs only by hand.
+#
+# This repository is shared by two platforms:
+#   - cloud:   GitHub Actions (this file) -> Docker Hub -> project-atmos-k8s
+#   - on-prem: Jenkins (project-atmos-onprem-jenkins) -> Nexus -> Flux
+#
+# The cloud environment is destroyed when not in use, so push and
+# pull_request triggers are DISABLED. Nothing in this file starts
+# automatically: no lint, no tests, no build, no delivery.
+#
+# Start it by hand: Actions -> CI-Delivery -> Run workflow (pick a branch).
+# Delivery (push to Docker Hub + trigger k8s) runs only on develop.
+#
+# To turn automatic runs back on: uncomment push / pull_request below.
+# =============================================================================
 on:
   workflow_dispatch:
   # push:

@@ -2,7 +2,7 @@
 
 ## Context
 
-Project Atmos requires a backend service that:
+Atmos requires a backend service that:
 
 - provides the HTTP API for the frontend;
 - retrieves weather data from the OpenWeather API;

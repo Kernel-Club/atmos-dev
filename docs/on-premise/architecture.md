@@ -45,7 +45,7 @@ SSH from the Mac to every VM (Ansible) is not drawn.
 
 **Admin machine (Mac):** the repositories, VS Code, Git, Ansible, `kubectl`, the Flux CLI and the browser. Ansible configures the servers over SSH and writes the `*.atmos.lan` names to `/etc/hosts` of the Mac.
 
-**Host PC:** Windows 11 Pro, Intel i5-12100F (4 cores / 8 threads), 16 GB RAM, 500 GB disk. It runs VirtualBox, Vagrant and the Windows OpenSSH server, and keeps a clone of `atmos-ansible` for the `Vagrantfile` (only `git pull`, no changes). The Mac runs Vagrant over SSH, for example `ssh atmos-host "cd atmos-ansible && vagrant up"` (`atmos-host` is an SSH alias of the PC). WSL2 and Hyper-V are not used, so VirtualBox runs natively. The only manual step is installing VirtualBox, Vagrant and OpenSSH on the PC and Ansible on the Mac.
+**Host PC:** Windows 11 Pro, Intel i3-12100F (4 cores / 8 threads), 16 GB RAM, 500 GB SSD. It runs VirtualBox, Vagrant and the Windows OpenSSH server, and keeps a clone of `atmos-ansible` for the `Vagrantfile` (only `git pull`, no changes). The Mac runs Vagrant over SSH, for example `ssh atmos-host "cd atmos-ansible && vagrant up"` (`atmos-host` is an SSH alias of the PC). WSL2 and Hyper-V are not used and Memory Integrity (Core isolation) is turned off, so VirtualBox runs natively without the Windows hypervisor. The only manual step is installing VirtualBox, Vagrant and OpenSSH on the PC and Ansible on the Mac.
 
 **Servers:** Ubuntu Server 24.04 LTS from a pinned Vagrant box (`bento/ubuntu-24.04`). Vagrant creates them and adds the SSH key of the Mac; Ansible configures them; each server then gets a `clean` snapshot.
 
@@ -63,7 +63,7 @@ Containers have a memory limit, the restart policy `unless-stopped` and, for Jen
 **Start and stop** (on the host, through `ssh atmos-host`):
 - `vagrant up` starts the servers in the order `nexus-traefik`, `jenkins`, `k8s-cp`, `k8s-w1` and creates the missing ones.
 - `vagrant halt k8s-w1 k8s-cp jenkins nexus-traefik` stops them safely. Stop them before games, Windows updates or sleep.
-- `vagrant halt jenkins` stops only CI; the application keeps running (demo mode, 9 GB).
+- `jenkins` runs only for CI: `vagrant up jenkins` before a build, `vagrant halt jenkins` after it. The application keeps running without it (section 3).
 
 **Rebuild:**
 - **Whole platform:** restore the `clean` snapshots or run `vagrant destroy` and `vagrant up`, then `site.yml`. Secrets are not in Git, so then by hand:
@@ -79,17 +79,17 @@ Containers have a memory limit, the restart policy `unless-stopped` and, for Jen
 
 ## 3. Resource budget
 
-Host RAM: Windows 3.9 GB (background only), VirtualBox overhead 0.6 GB, servers 11.5 GB. VirtualBox reserves the full RAM of each server, so the servers must not use more than 11.5 GB together.
+Host RAM: 15.8 GB; Windows keeps about 5.2 GB, so about 10.6 GB are available, minus 0.6 GB VirtualBox overhead. VirtualBox reserves the full RAM of each running server. The application servers (`nexus-traefik`, `k8s-cp`, `k8s-w1`) use 9 GB, so `jenkins` (2.5 GB) runs only for CI. With all four servers (11.5 GB) Windows uses its page file: builds are slower, but they finish.
 
 | Server | vCPU | RAM | Disk | Swap |
 |---|---:|---:|---:|---|
-| `nexus-traefik` | 1 | 3 GB | 50 GB | 1 GB |
-| `jenkins` | 2 | 2.5 GB | 40 GB | 1 GB |
-| `k8s-cp` | 2 | 2.5 GB | 40 GB | — |
-| `k8s-w1` | 2 | 3.5 GB | 60 GB | — |
-| **Total** | **7 of 8** | **11.5 GB** | **190 GB** | |
+| `nexus-traefik` | 2 | 3 GB | 64 GB | 1 GB |
+| `jenkins` | 2 | 2.5 GB | 64 GB | 1 GB |
+| `k8s-cp` | 2 | 2.5 GB | 64 GB | — |
+| `k8s-w1` | 2 | 3.5 GB | 64 GB | — |
+| **Total** | **8 of 8** | **11.5 GB** | **256 GB (dynamic)** | |
 
-The servers are idle most of the time; only builds use a lot of CPU for a short time. With the `clean` snapshots (about 40 GB), the disk use is about 230 GB of 500 GB.
+Every server needs 2 vCPUs: with one vCPU the box kernel hangs early in boot. The servers are idle most of the time, so 8 vCPUs on 8 host threads are acceptable. The disks come from the box: 64 GB each, dynamically allocated, so they use only what is written. They are on drive D: (about 110 GB free); the planned use at full load is about 140 GB, so free disk space is watched.
 
 | Server | Component | RAM (limit) | Disk |
 |---|---|---:|---:|
@@ -97,12 +97,12 @@ The servers are idle most of the time; only builds use a lot of CPU for a short 
 | | Docker Engine | 0.2 GB | 5 GB |
 | | Nexus (JVM heap 1 GB) | 2 GB | 30 GB |
 | | Traefik | 0.1 GB | — |
-| | **Total / free** | **2.7 / 0.3 GB** | **45 / 5 GB** |
+| | **Total / free** | **2.7 / 0.3 GB** | **45 / 19 GB** |
 | `jenkins` | Ubuntu, node-exporter | 0.4 GB | 10 GB |
 | | Docker Engine | 0.2 GB | 20 GB (images, build cache) |
 | | Jenkins (JVM heap 768 MB) | 1 GB | 5 GB |
 | | Image build (peak) | 0.8 GB | — |
-| | **Total / free** | **2.4 / 0.1 GB** | **35 / 5 GB** |
+| | **Total / free** | **2.4 / 0.1 GB** | **35 / 29 GB** |
 
 | Node | RAM | OS + k3s | Pods (memory limit) | Free |
 |---|---:|---:|---|---:|
@@ -115,7 +115,7 @@ Every pod has a memory request and limit and a CPU request (no CPU limits), beca
 
 ## 4. Network
 
-- Home network `192.168.1.0/24`. Each server has a bridged adapter with a fixed address set by Vagrant, outside the router DHCP range (.51–.54), and a NAT adapter for Vagrant's own SSH (`vagrant halt`).
+- Home network `192.168.0.0/24`. Each server has a bridged adapter with a fixed address set by Vagrant, outside the router DHCP range (.51–.54), and a NAT adapter for Vagrant's own SSH (`vagrant halt`).
 - The Mac and the host PC have DHCP reservations. `ufw` allows SSH and the Kubernetes API only from the Mac; SSH is also allowed on the NAT adapter for Vagrant. SSH uses keys only.
 - No DNS server. Ansible writes the names to `/etc/hosts` of the Mac (all `*.atmos.lan` names) and of every server (`nexus.atmos.lan`), and to the k3s `coredns-custom` ConfigMap (`nexus.atmos.lan` for Flux, because pods do not read `/etc/hosts` of the node).
 - Ansible creates a self-signed CA and a certificate for `*.atmos.lan` (name in the SAN field, which Docker, containerd and Flux require). The CA is trusted on the Mac, in Docker on `jenkins`, on the cluster nodes (`registries.yaml`) and in Flux.
@@ -123,16 +123,16 @@ Every pod has a memory request and limit and a CPU request (no CPU limits), beca
 
 | Name | Address | Served by | Protocol |
 |---|---|---|---|
-| `atmos.lan`, `grafana.atmos.lan` | 192.168.1.52 | Traefik in the cluster | HTTP |
-| `jenkins.atmos.lan` | 192.168.1.53 | Traefik on `nexus-traefik` → Jenkins `192.168.1.54:8080` | HTTPS |
-| `nexus.atmos.lan`, `nexus.atmos.lan:5000` | 192.168.1.53 | Traefik on `nexus-traefik` → Nexus web interface, Docker registry | HTTPS |
+| `atmos.lan`, `grafana.atmos.lan` | 192.168.0.52 | Traefik in the cluster | HTTP |
+| `jenkins.atmos.lan` | 192.168.0.53 | Traefik on `nexus-traefik` → Jenkins `192.168.0.54:8080` | HTTPS |
+| `nexus.atmos.lan`, `nexus.atmos.lan:5000` | 192.168.0.53 | Traefik on `nexus-traefik` → Nexus web interface, Docker registry | HTTPS |
 
 | Server | Address | Open ports (`ufw`) |
 |---|---|---|
-| `nexus-traefik` | 192.168.1.53 | 22 (Mac), 80/443 (home network), 5000 (`jenkins`, cluster nodes), 9100 (cluster nodes) |
-| `jenkins` | 192.168.1.54 | 22 (Mac), 8080 (`nexus-traefik` only), 9100 (cluster nodes) |
-| `k8s-cp` | 192.168.1.51 | 22 (Mac), 6443 (Mac, `k8s-w1`), 10250 and 8472/udp (cluster nodes), 80/443 (home network), 9100 (cluster nodes) |
-| `k8s-w1` | 192.168.1.52 | 22 (Mac), 10250 and 8472/udp (cluster nodes), 80/443 (home network), 9100 (cluster nodes) |
+| `nexus-traefik` | 192.168.0.53 | 22 (Mac), 80/443 (home network), 5000 (`jenkins`, cluster nodes), 9100 (cluster nodes) |
+| `jenkins` | 192.168.0.54 | 22 (Mac), 8080 (`nexus-traefik` only), 9100 (cluster nodes) |
+| `k8s-cp` | 192.168.0.51 | 22 (Mac), 6443 (Mac, `k8s-w1`), 10250 and 8472/udp (cluster nodes), 80/443 (home network), 9100 (cluster nodes) |
+| `k8s-w1` | 192.168.0.52 | 22 (Mac), 10250 and 8472/udp (cluster nodes), 80/443 (home network), 9100 (cluster nodes) |
 
 - On the cluster nodes, `ufw` also allows the pod network `10.42.0.0/16` and the service network `10.43.0.0/16`; otherwise pods cannot reach the API server or node-exporter on their own node.
 - Ports that Docker publishes in the normal way bypass `ufw`. So Traefik and Jenkins run in the host network, where `ufw` applies, and Nexus is published only on `127.0.0.1` of `nexus-traefik`.

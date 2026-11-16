@@ -23,7 +23,7 @@ Each part lives in its own repository:
 
 | Part | Repository |
 |---|---|
-| Install Docker, Nexus, Traefik (`nexus-traefik`) and Docker, Jenkins (`jenkins`); admin passwords in Ansible Vault | `atmos-ansible` (`roles/docker/`, `roles/nexus/`, `roles/traefik/`, `roles/jenkins/`) |
+| Install Docker, Nexus, Traefik (`nexus-traefik`) and Docker, Jenkins (`jenkins`), run with Docker Compose; admin passwords in Ansible Vault | `atmos-ansible` (`roles/docker/`, `roles/nexus/`, `roles/traefik/`, `roles/jenkins/`) |
 | CI pipeline: lint, tests, image build, tagging, push to Nexus | `atmos-jenkins` (`Jenkinsfile`) |
 | CD: Flux, image automation, Helm chart | `atmos-k8s` (`flux-system/`, `charts/atmos/`) |
 

@@ -44,7 +44,7 @@ CI and the registry run on two VMs outside the cluster. The cluster depends only
 
 ## Why
 
-- **Low resources:** the k3s control plane needs about 1 GB of RAM. The three application servers fit into 9 GB of the 10.6 GB available on the host; `jenkins` runs only for CI.
+- **Low resources:** the k3s control plane needs about 1 GB of RAM. The four servers (11.5 GB) run on the about 11 GB available on the host; about 1 GB is served from the Windows page file.
 - **Certified Kubernetes:** standard APIs, so the skills and manifests are the same as for any other cluster.
 - **Batteries included:** ingress (Traefik), load balancer (ServiceLB), storage (local-path) and NetworkPolicy enforcement come with k3s.
 - **Survives reboots:** k3s runs as a systemd service and the cluster comes back after the VMs start.
@@ -60,6 +60,6 @@ CI and the registry run on two VMs outside the cluster. The cluster depends only
 - **Trade-off:** local-path storage keeps MongoDB data on the disk of one node. The pod cannot move to another node, and the data is lost if the disk is lost.
 - **Trade-off:** Vagrant must run where VirtualBox is. The host PC keeps a clone of `atmos-ansible` (only `git pull`) and an OpenSSH server. If the Mac cannot reach the PC, the servers keep running but cannot be started, stopped or rebuilt from the Mac.
 - **Trade-off:** four VMs have more overhead than three (about 0.15 GB of RAM per VM in VirtualBox).
-- **Trade-off:** the host RAM does not fit all four servers: `jenkins` runs only for CI, and builds use the Windows page file.
+- **Trade-off:** the host RAM does not fully fit all four servers: about 1 GB is served from the Windows page file, so peaks are slower.
 - **Trade-off:** Memory Integrity (Core isolation) is turned off on the host PC, because it runs the Windows hypervisor: weaker kernel protection, accepted for a home lab server.
 - **Trade-off:** Ansible changes `/etc/hosts` on the Mac, which needs administrator rights (`--ask-become-pass`).

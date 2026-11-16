@@ -45,25 +45,25 @@ SSH from the Mac to every VM (Ansible) is not drawn.
 
 **Admin machine (Mac):** the repositories, VS Code, Git, Ansible, `kubectl`, the Flux CLI and the browser. Ansible configures the servers over SSH and writes the `*.atmos.lan` names to `/etc/hosts` of the Mac.
 
-**Host PC:** Windows 11 Pro, Intel i3-12100F (4 cores / 8 threads), 16 GB RAM, 500 GB SSD. It runs VirtualBox, Vagrant and the Windows OpenSSH server, and keeps a clone of `atmos-ansible` for the `Vagrantfile` (only `git pull`, no changes). The Mac runs Vagrant over SSH, for example `ssh atmos-host "cd atmos-ansible && vagrant up"` (`atmos-host` is an SSH alias of the PC). WSL2 and Hyper-V are not used and Memory Integrity (Core isolation) is turned off, so VirtualBox runs natively without the Windows hypervisor. The only manual step is installing VirtualBox, Vagrant and OpenSSH on the PC and Ansible on the Mac.
+**Host PC:** Windows 11 Pro, Intel i3-12100F (4 cores / 8 threads), 16 GB RAM, 500 GB SSD. It runs VirtualBox, Vagrant and the Windows OpenSSH server, and keeps a clone of `atmos-ansible` for the `Vagrantfile` (only `git pull`, no changes). The Mac runs the Vagrant commands on the PC over SSH. WSL2 and Hyper-V are not used and Memory Integrity (Core isolation) is turned off, so VirtualBox runs natively without the Windows hypervisor. The only manual step is installing VirtualBox, Vagrant and OpenSSH on the PC and Ansible on the Mac.
 
 **Servers:** Ubuntu Server 24.04 LTS from a pinned Vagrant box (`bento/ubuntu-24.04`). Vagrant creates them and adds the SSH key of the Mac; Ansible configures them; each server then gets a `clean` snapshot.
 
 | Server | Role | Runs |
 |---|---|---|
-| `nexus-traefik` | Image registry and HTTPS entry point | Docker Engine; Docker containers: Nexus, Traefik; node-exporter |
-| `jenkins` | CI server | Docker Engine; Docker container: Jenkins; node-exporter |
+| `nexus-traefik` | Image registry and HTTPS entry point | Docker Engine; Docker Compose: Nexus, Traefik; node-exporter |
+| `jenkins` | CI server | Docker Engine; Docker Compose: Jenkins; node-exporter |
 | `k8s-cp` | Kubernetes control plane | k3s server, node-exporter |
 | `k8s-w1` | Kubernetes worker | k3s agent, node-exporter |
 
 CI and the registry run outside the cluster, on two separate servers. The cluster depends only on `nexus-traefik`; a build cannot take RAM from Nexus; `jenkins` can be stopped or rebuilt while the application keeps running.
 
-Containers have a memory limit, the restart policy `unless-stopped` and, for Jenkins and Nexus, a data volume. k3s and node-exporter are systemd services, so everything starts by itself. Jenkins builds the images through the Docker socket of its own server, one build at a time. `nexus-traefik` and `jenkins` have a 1 GB swap file; the cluster nodes have no swap (kubelet).
+On `nexus-traefik` and `jenkins`, Ansible places a `docker-compose.yml` and starts it with Docker Compose; no orchestrator is needed for one or two long-running containers per server. Containers have a memory limit, the restart policy `unless-stopped` and, for Jenkins and Nexus, a data volume. k3s and node-exporter are systemd services, so everything starts by itself. Jenkins builds the images through the Docker socket of its own server, one build at a time. `nexus-traefik` and `jenkins` have a 1 GB swap file; the cluster nodes have no swap (kubelet).
 
-**Start and stop** (on the host, through `ssh atmos-host`):
+**Start and stop** (on the host PC, over SSH from the Mac):
 - `vagrant up` starts the servers in the order `nexus-traefik`, `jenkins`, `k8s-cp`, `k8s-w1` and creates the missing ones.
-- `vagrant halt k8s-w1 k8s-cp jenkins nexus-traefik` stops them safely. Stop them before games, Windows updates or sleep.
-- `jenkins` runs only for CI: `vagrant up jenkins` before a build, `vagrant halt jenkins` after it. The application keeps running without it (section 3).
+- `vagrant halt` stops them safely, one call per server in the reverse order (`k8s-w1`, `k8s-cp`, `jenkins`, `nexus-traefik`): with several names in one call, Vagrant stops them in the `Vagrantfile` order. Stop them before Windows updates or a host restart.
+- All four servers run all the time; the application keeps running if `jenkins` is stopped.
 
 **Rebuild:**
 - **Whole platform:** restore the `clean` snapshots or run `vagrant destroy` and `vagrant up`, then `site.yml`. Secrets are not in Git, so then by hand:
@@ -79,7 +79,7 @@ Containers have a memory limit, the restart policy `unless-stopped` and, for Jen
 
 ## 3. Resource budget
 
-Host RAM: 15.8 GB; Windows keeps about 5.2 GB, so about 10.6 GB are available, minus 0.6 GB VirtualBox overhead. VirtualBox reserves the full RAM of each running server. The application servers (`nexus-traefik`, `k8s-cp`, `k8s-w1`) use 9 GB, so `jenkins` (2.5 GB) runs only for CI. With all four servers (11.5 GB) Windows uses its page file: builds are slower, but they finish.
+Host RAM: 15.8 GB; about 11 GB are available for the servers. VirtualBox reserves the full RAM of each running server. The four servers are allocated 11.5 GB, plus about 0.6 GB of VirtualBox overhead; the remaining ~1 GB is served from the Windows page file (SSD).
 
 | Server | vCPU | RAM | Disk | Swap |
 |---|---:|---:|---:|---|
@@ -115,7 +115,7 @@ Every pod has a memory request and limit and a CPU request (no CPU limits), beca
 
 ## 4. Network
 
-- Home network `192.168.0.0/24`. Each server has a bridged adapter with a fixed address set by Vagrant, outside the router DHCP range (.51–.54), and a NAT adapter for Vagrant's own SSH (`vagrant halt`).
+- Home network `192.168.0.0/24`. Each server has a bridged adapter with a fixed address set by Vagrant (.51–.54), outside the router DHCP pool (.100–.249), and a NAT adapter for Vagrant's own SSH (`vagrant halt`).
 - The Mac and the host PC have DHCP reservations. `ufw` allows SSH and the Kubernetes API only from the Mac; SSH is also allowed on the NAT adapter for Vagrant. SSH uses keys only.
 - No DNS server. Ansible writes the names to `/etc/hosts` of the Mac (all `*.atmos.lan` names) and of every server (`nexus.atmos.lan`), and to the k3s `coredns-custom` ConfigMap (`nexus.atmos.lan` for Flux, because pods do not read `/etc/hosts` of the node).
 - Ansible creates a self-signed CA and a certificate for `*.atmos.lan` (name in the SAN field, which Docker, containerd and Flux require). The CA is trusted on the Mac, in Docker on `jenkins`, on the cluster nodes (`registries.yaml`) and in Flux.
@@ -138,7 +138,7 @@ Every pod has a memory request and limit and a CPU request (no CPU limits), beca
 - Ports that Docker publishes in the normal way bypass `ufw`. So Traefik and Jenkins run in the host network, where `ufw` applies, and Nexus is published only on `127.0.0.1` of `nexus-traefik`.
 - Traefik reaches Jenkins over plain HTTP inside the home network (.53 → .54:8080).
 - ServiceLB publishes the cluster Traefik on ports 80/443 of both nodes; the names point to `k8s-w1`. NetworkPolicy allows MongoDB and Redis to accept traffic only from the backend.
-- The addresses are examples; the `Vagrantfile` and the Ansible inventory must use the same ones.
+- The `Vagrantfile` and the Ansible inventory must use the same addresses.
 
 ```mermaid
 flowchart LR
@@ -169,6 +169,7 @@ SSH from the Mac to every server (port 22) is not drawn.
 | Server configuration | Ansible, versions pinned in `group_vars/` | Mac → servers |
 | Kubernetes | k3s (pinned version), `local-path` storage | `k8s-cp`, `k8s-w1` |
 | Ingress | Traefik bundled with k3s, limits in a `HelmChartConfig` | cluster |
+| Containers outside the cluster | Docker Engine, Docker Compose (file placed by Ansible) | `nexus-traefik`, `jenkins` |
 | Reverse proxy | Traefik container, host network, file configuration | `nexus-traefik` |
 | CI, image build | Jenkins container (host network, pinned plugins, one executor), Docker Engine | `jenkins` |
 | Image registry | Nexus Repository, Docker hosted repository, cleanup policy | `nexus-traefik` |
@@ -218,9 +219,9 @@ Nexus has separate users: Jenkins can push; the cluster and Flux can only pull. 
 | Ansible role | Servers |
 |---|---|
 | `common` (packages, `ufw`, node-exporter, hosts entries, swap outside the cluster) | all four |
-| `docker` | `nexus-traefik`, `jenkins` |
-| `nexus`, `traefik` | `nexus-traefik` |
-| `jenkins` | `jenkins` |
+| `docker` (Docker Engine, Compose plugin) | `nexus-traefik`, `jenkins` |
+| `nexus`, `traefik` (Compose services) | `nexus-traefik` |
+| `jenkins` (Compose service) | `jenkins` |
 | `k3s` (install, `HelmChartConfig`, `registries.yaml`) | `k8s-cp`, `k8s-w1` |
 
 Rule: a change to a server goes to `atmos-ansible`, a change to the build to `atmos-jenkins`, a change to what runs in the cluster to `atmos-k8s`. k3s itself is installed by Ansible; `atmos-k8s` holds only the workloads.

@@ -47,7 +47,7 @@ SSH from the Mac to every VM (Ansible) is not drawn.
 
 **Host PC:** Windows 11 Pro, Intel i3-12100F (4 cores / 8 threads), 16 GB RAM, 500 GB SSD. It runs VirtualBox, Vagrant and the Windows OpenSSH server, and keeps a clone of `atmos-ansible` for the `Vagrantfile` (only `git pull`, no changes). The Mac runs the Vagrant commands on the PC over SSH. WSL2 and Hyper-V are not used and Memory Integrity (Core isolation) is turned off, so VirtualBox runs natively without the Windows hypervisor. The only manual step is installing VirtualBox, Vagrant and OpenSSH on the PC and Ansible on the Mac.
 
-**Servers:** Ubuntu Server 24.04 LTS from a pinned Vagrant box (`bento/ubuntu-24.04`). Vagrant creates them and adds the SSH key of the Mac; Ansible configures them; each server then gets a `clean` snapshot.
+**Servers:** Ubuntu Server 24.04 LTS from a pinned Vagrant box (`bento/ubuntu-24.04`). Vagrant creates them, replaces the SSH host keys of the box with unique keys and adds the SSH key of the Mac; Ansible configures them; each server then gets a `clean` snapshot.
 
 | Server | Role | Runs |
 |---|---|---|
@@ -111,14 +111,14 @@ Every server needs 2 vCPUs: with one vCPU the box kernel hangs early in boot. Th
 
 Every pod has a memory request and limit and a CPU request (no CPU limits), because the scheduler places pods by their requests. MongoDB and Prometheus are pinned to `k8s-w1` (`nodeSelector`), because local-path keeps their data on one node. Node disks: OS 10 GB, images 10–20 GB, volumes on `k8s-w1` 10 GB (MongoDB 5, Prometheus 5), the rest is free.
 
-**Review after one week in Grafana:** if Jenkins is killed by OOM, move 0.5 GB from `k8s-w1` to `jenkins`; if `k8s-w1` always has more than 1 GB free, give it to another server; if the Nexus blob store grows, keep only the last N tags (cleanup policy).
+**Review after one week in Grafana:** if Jenkins is killed by OOM, move 0.5 GB from `k8s-w1` to `jenkins`; if `k8s-w1` always has more than 1 GB free, give it to another server; if the Nexus blob store grows, remove old tags by hand (Nexus Community has no "keep the last N versions" cleanup).
 
 ## 4. Network
 
 - Home network `192.168.0.0/24`. Each server has a bridged adapter with a fixed address set by Vagrant (.51–.54), outside the router DHCP pool (.100–.249), and a NAT adapter for Vagrant's own SSH (`vagrant halt`).
 - The Mac and the host PC have DHCP reservations. `ufw` allows SSH and the Kubernetes API only from the Mac; SSH is also allowed on the NAT adapter for Vagrant. SSH uses keys only.
 - No DNS server. Ansible writes the names to `/etc/hosts` of the Mac (all `*.atmos.lan` names) and of every server (`nexus.atmos.lan`), and to the k3s `coredns-custom` ConfigMap (`nexus.atmos.lan` for Flux, because pods do not read `/etc/hosts` of the node).
-- Ansible creates a self-signed CA and a certificate for `*.atmos.lan` (name in the SAN field, which Docker, containerd and Flux require). The CA is trusted on the Mac, in Docker on `jenkins`, on the cluster nodes (`registries.yaml`) and in Flux.
+- Ansible creates a private CA and a certificate for `*.atmos.lan` on the Mac (name in the SAN field, which Docker, containerd and Flux require); the CA key never leaves the Mac. The CA is trusted on the Mac, in Docker on `jenkins`, on the cluster nodes (`registries.yaml`) and in Flux.
 - The router forwards no ports; nothing is reachable from the internet.
 
 | Name | Address | Served by | Protocol |
@@ -172,7 +172,7 @@ SSH from the Mac to every server (port 22) is not drawn.
 | Containers outside the cluster | Docker Engine, Docker Compose (file placed by Ansible) | `nexus-traefik`, `jenkins` |
 | Reverse proxy | Traefik container, host network, file configuration | `nexus-traefik` |
 | CI, image build | Jenkins container (host network, pinned plugins, one executor), Docker Engine | `jenkins` |
-| Image registry | Nexus Repository, Docker hosted repository, cleanup policy | `nexus-traefik` |
+| Image registry | Nexus Repository (Community), Docker hosted repository, weekly tasks for unused data; old tags removed by hand | `nexus-traefik` |
 | Packaging, GitOps | Helm chart `charts/atmos/`, Flux with image automation | `atmos-k8s`, cluster |
 | Firewall | `ufw` on every server; NetworkPolicy in the cluster | servers, cluster |
 | Monitoring | Prometheus (retention 3 days), kube-state-metrics, Grafana; node-exporter on all four servers | cluster, servers |
@@ -180,7 +180,8 @@ SSH from the Mac to every server (port 22) is not drawn.
 
 | Secret | Stored in |
 |---|---|
-| Nexus and Jenkins admin passwords, Nexus users, registry credentials | Ansible Vault in `atmos-ansible`; the vault password stays on the Mac |
+| Nexus and Jenkins admin passwords, Nexus users, registry credentials | Ansible Vault in `atmos-ansible`; the vault password is in the macOS Keychain of the Mac |
+| Private CA key | Only on the Mac (`~/.atmos/pki`), with a backup outside the Mac |
 | Read-only deploy key for `atmos-dev`, Nexus push user | Jenkins Credentials store |
 | OpenWeather key, MongoDB and Grafana passwords, Flux registry credentials | Kubernetes Secrets created by hand |
 | Flux deploy key (write access to `atmos-k8s` only) | Flux and GitHub |

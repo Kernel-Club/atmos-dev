@@ -23,7 +23,7 @@ We choose **k3s** on **four VirtualBox VMs** (Ubuntu Server 24.04 LTS). **Vagran
 | `k8s-cp` | k3s server (control plane) |
 | `k8s-w1` | k3s agent (worker) |
 
-- `Vagrantfile` describes the VMs (box, CPU, RAM, network, SSH key of the Mac). `vagrant up` creates the VMs that do not exist and starts them; it changes only what differs from the file. The box version is pinned.
+- `Vagrantfile` describes the VMs (box, CPU, RAM, network, unique SSH host keys, SSH key of the Mac). `vagrant up` creates the VMs that do not exist and starts them; it changes only what differs from the file. The box version is pinned.
 - `site.yml` configures all servers, installs Nexus, Traefik, Jenkins and k3s. Versions are pinned in `group_vars/`.
 - `vagrant halt` stops the servers safely.
 - A `clean` snapshot of each VM (`vagrant snapshot save`) after the base configuration allows a fast rebuild.

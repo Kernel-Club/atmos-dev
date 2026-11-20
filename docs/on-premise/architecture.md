@@ -51,14 +51,14 @@ SSH from the Mac to every VM (Ansible) is not drawn.
 
 | Server | Role | Runs |
 |---|---|---|
-| `nexus-traefik` | Image registry and HTTPS entry point | Docker Engine; Docker Compose: Nexus, Traefik; node-exporter |
-| `jenkins` | CI server | Docker Engine; Docker Compose: Jenkins; node-exporter |
+| `nexus-traefik` | Image registry and HTTPS entry point | Docker Engine; containers: Nexus, Traefik; node-exporter |
+| `jenkins` | CI server | Docker Engine; container: Jenkins; node-exporter |
 | `k8s-cp` | Kubernetes control plane | k3s server, node-exporter |
 | `k8s-w1` | Kubernetes worker | k3s agent, node-exporter |
 
 CI and the registry run outside the cluster, on two separate servers. The cluster depends only on `nexus-traefik`; a build cannot take RAM from Nexus; `jenkins` can be stopped or rebuilt while the application keeps running.
 
-On `nexus-traefik` and `jenkins`, Ansible places a `docker-compose.yml` and starts it with Docker Compose; no orchestrator is needed for one or two long-running containers per server. Containers have a memory limit, the restart policy `unless-stopped` and, for Jenkins and Nexus, a data volume. k3s and node-exporter are systemd services, so everything starts by itself. Jenkins builds the images through the Docker socket of its own server, one build at a time. `nexus-traefik` and `jenkins` have a 1 GB swap file; the cluster nodes have no swap (kubelet).
+On `nexus-traefik` and `jenkins`, Ansible runs the containers directly; no orchestrator is needed for one or two long-running containers per server. Containers have a memory limit, the restart policy `unless-stopped` and, for Jenkins and Nexus, a data volume. k3s and node-exporter are systemd services, so everything starts by itself. Jenkins builds the images through the Docker socket of its own server, one build at a time. `nexus-traefik` and `jenkins` have a 1 GB swap file; the cluster nodes have no swap (kubelet).
 
 **Start and stop** (on the host PC, over SSH from the Mac):
 - `vagrant up` starts the servers in the order `nexus-traefik`, `jenkins`, `k8s-cp`, `k8s-w1` and creates the missing ones.
@@ -169,7 +169,7 @@ SSH from the Mac to every server (port 22) is not drawn.
 | Server configuration | Ansible, versions pinned in `group_vars/` | Mac → servers |
 | Kubernetes | k3s (pinned version), `local-path` storage | `k8s-cp`, `k8s-w1` |
 | Ingress | Traefik bundled with k3s, limits in a `HelmChartConfig` | cluster |
-| Containers outside the cluster | Docker Engine, Docker Compose (file placed by Ansible) | `nexus-traefik`, `jenkins` |
+| Containers outside the cluster | Docker Engine, containers run by Ansible | `nexus-traefik`, `jenkins` |
 | Reverse proxy | Traefik container, host network, file configuration | `nexus-traefik` |
 | CI, image build | Jenkins container (host network, pinned plugins, one executor), Docker Engine | `jenkins` |
 | Image registry | Nexus Repository (Community), Docker hosted repository, weekly tasks for unused data; old tags removed by hand | `nexus-traefik` |
@@ -220,9 +220,9 @@ Nexus has separate users: Jenkins can push; the cluster and Flux can only pull. 
 | Ansible role | Servers |
 |---|---|
 | `common` (packages, `ufw`, node-exporter, hosts entries, swap outside the cluster) | all four |
-| `docker` (Docker Engine, Compose plugin) | `nexus-traefik`, `jenkins` |
-| `nexus`, `traefik` (Compose services) | `nexus-traefik` |
-| `jenkins` (Compose service) | `jenkins` |
+| `docker` (Docker Engine) | `nexus-traefik`, `jenkins` |
+| `nexus`, `traefik` (containers) | `nexus-traefik` |
+| `jenkins` (container) | `jenkins` |
 | `k3s` (install, `HelmChartConfig`, `registries.yaml`) | `k8s-cp`, `k8s-w1` |
 
 Rule: a change to a server goes to `atmos-ansible`, a change to the build to `atmos-jenkins`, a change to what runs in the cluster to `atmos-k8s`. k3s itself is installed by Ansible; `atmos-k8s` holds only the workloads.

@@ -41,6 +41,7 @@ CI and the registry run on two VMs outside the cluster. The cluster depends only
 - **Vagrant and Ansible in WSL2 on the host (previous design):** no second machine, but WSL2 needs Hyper-V, so VirtualBox runs slower on top of it; Vagrant in WSL2 needs extra settings, and WSL2 takes 1 GB of RAM. The code is on the Mac anyway.
 - **Ansible with `VBoxManage` for the VMs:** one tool less, but imperative: every step (create the VM, attach the disk, unattended OS install, check if the VM already exists) must be written and tested by hand. Vagrant gives the same result from one declarative file, and the `Vagrantfile` stays in the same repository as the Ansible code.
 - **VMs created by hand:** simple, but a rebuild needs manual steps and the result can differ.
+- **Docker Compose for Nexus, Traefik and Jenkins (previous design):** each Compose file held one container and its shared network was not used (Traefik stays in the host network for `ufw`, Jenkins is on another VM). Ansible already declares the containers, so Compose was an extra layer with no gain.
 
 ## Why
 
@@ -48,7 +49,7 @@ CI and the registry run on two VMs outside the cluster. The cluster depends only
 - **Certified Kubernetes:** standard APIs, so the skills and manifests are the same as for any other cluster.
 - **Batteries included:** ingress (Traefik), load balancer (ServiceLB), storage (local-path) and NetworkPolicy enforcement come with k3s.
 - **Survives reboots:** k3s runs as a systemd service and the cluster comes back after the VMs start.
-- **Rebuild from Git:** the whole platform, from the empty VM to the running cluster, is described in `atmos-ansible`. The workloads that run inside the cluster are described separately in `atmos-k8s` and installed by Flux. The secrets (Jenkins credentials, Flux bootstrap, Kubernetes Secrets) and the Jenkins job are created by hand after a rebuild.
+- **Rebuild from Git:** the whole platform, from the empty VM to the running cluster, is described in `atmos-ansible`. The workloads that run inside the cluster are described separately in `atmos-k8s` and installed by Flux. Jenkins is configured from `atmos-jenkins` with secrets from Ansible Vault. The Flux bootstrap, the Kubernetes Secrets and the Jenkins job are created by hand after a rebuild.
 
 ## Consequences
 

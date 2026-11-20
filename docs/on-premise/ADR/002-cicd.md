@@ -17,14 +17,15 @@ Atmos requires an on-premise CI/CD process that:
 - **Registry:** Nexus Repository (Docker hosted repository) on the `nexus-traefik` VM, reached as `nexus.atmos.lan:5000` over HTTPS through Traefik.
 - **CD:** Flux with image automation in the cluster (GitOps, pull model).
 
-The `Jenkinsfile` lives in `atmos-jenkins`. The Jenkins job reads it from that repository; the `Jenkinsfile` checks out `atmos-dev` (branch `develop`) with a read-only deploy key. Builds start by SCM polling, because GitHub webhooks cannot reach the home network.
+The Jenkins platform (image, plugins, configuration as code) lives in `atmos-jenkins`. The `Jenkinsfile` lives in `atmos-dev`, next to the code it builds; Jenkins checks out `develop` over HTTPS without a credential, because the repository is public. Builds start by SCM polling, because GitHub webhooks cannot reach the home network.
 
 Each part lives in its own repository:
 
 | Part | Repository |
 |---|---|
-| Install Docker, Nexus, Traefik (`nexus-traefik`) and Docker, Jenkins (`jenkins`), run with Docker Compose; admin passwords in Ansible Vault | `atmos-ansible` (`roles/docker/`, `roles/nexus/`, `roles/traefik/`, `roles/jenkins/`) |
-| CI pipeline: lint, tests, image build, tagging, push to Nexus | `atmos-jenkins` (`Jenkinsfile`) |
+| Install Docker, Nexus, Traefik (`nexus-traefik`) and Docker, Jenkins (`jenkins`), run as Docker containers by Ansible; admin passwords in Ansible Vault | `atmos-ansible` (`roles/docker/`, `roles/nexus/`, `roles/traefik/`, `roles/jenkins/`) |
+| Jenkins platform: image, plugins, configuration as code | `atmos-jenkins` (`Dockerfile`, `plugins.txt`, `casc/`) |
+| CI pipeline: lint, tests, image build, tagging, push to Nexus | `atmos-dev` (`Jenkinsfile`) |
 | CD: Flux, image automation, Helm chart | `atmos-k8s` (`flux-system/`, `charts/atmos/`) |
 
 Flow: commit to `develop` → Jenkins (lint, tests, build) → push to Nexus → Flux sees the new tag → Flux commits it to `atmos-k8s` → Flux upgrades the Helm release. Jenkins does CI, Flux does CD. Jenkins has no kubeconfig and no access to `atmos-k8s`.
@@ -59,7 +60,8 @@ Suspend the image update automation, revert the tag commit in `atmos-k8s`, and r
 - **Harbor:** a stronger registry (scanning, signing), but needs more RAM than Nexus on the `nexus-traefik` VM.
 - **Argo CD:** comparable GitOps tool with a web UI, but uses more RAM. Flux is lighter and has built-in image automation.
 - **Jenkins deploys with `kubectl` / `helm` (push model):** simpler, but Jenkins would need cluster credentials, and the cluster state would not be described in Git.
-- **`Jenkinsfile` in `atmos-dev`:** fewer repositories, but on-premise configuration would mix with the shared application code.
+- **`Jenkinsfile` in `atmos-jenkins` (previous design):** the pipeline was apart from the code it builds, so a change of paths or Dockerfiles needed two repositories.
+- **Jenkins configured in the web interface or with Groovy init scripts:** manual setup cannot be rebuilt the same way; init scripts are imperative and use internal APIs. JCasC is declarative, applied at every start and fails on unknown settings.
 
 ## Why
 
@@ -79,4 +81,4 @@ Suspend the image update automation, revert the tag commit in `atmos-k8s`, and r
 - **Trade-off:** a rollback needs two steps (suspend automation, revert).
 - **Trade-off:** Jenkins builds with the Docker socket of `jenkins`, which gives it root rights on that VM. Jenkins is reachable only through Traefik: `ufw` accepts port 8080 only from `nexus-traefik`.
 - **Trade-off:** the build number is part of the tag. `jenkins` can be rebuilt alone; then Jenkins counts from 1 again while Nexus keeps higher tags, and Flux does not deploy the new builds. After a rebuild of `jenkins`, **Next Build Number** of the job is set above the highest tag in Nexus.
-- **Trade-off:** two repositories must stay in sync: the `Jenkinsfile` depends on the paths and Dockerfiles in `atmos-dev`.
+- **Trade-off:** the `Jenkinsfile` uses credential IDs (`nexus-push`) defined in `atmos-jenkins`; renaming one needs a change in both repositories.

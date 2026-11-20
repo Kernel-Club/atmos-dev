@@ -51,14 +51,14 @@ SSH from the Mac to every VM (Ansible) is not drawn.
 
 | Server | Role | Runs |
 |---|---|---|
-| `nexus-traefik` | Image registry and HTTPS entry point | Docker Engine; Docker Compose: Nexus, Traefik; node-exporter |
-| `jenkins` | CI server | Docker Engine; Docker Compose: Jenkins; node-exporter |
+| `nexus-traefik` | Image registry and HTTPS entry point | Docker Engine; containers: Nexus, Traefik; node-exporter |
+| `jenkins` | CI server | Docker Engine; container: Jenkins; node-exporter |
 | `k8s-cp` | Kubernetes control plane | k3s server, node-exporter |
 | `k8s-w1` | Kubernetes worker | k3s agent, node-exporter |
 
 CI and the registry run outside the cluster, on two separate servers. The cluster depends only on `nexus-traefik`; a build cannot take RAM from Nexus; `jenkins` can be stopped or rebuilt while the application keeps running.
 
-On `nexus-traefik` and `jenkins`, Ansible places a `docker-compose.yml` and starts it with Docker Compose; no orchestrator is needed for one or two long-running containers per server. Containers have a memory limit, the restart policy `unless-stopped` and, for Jenkins and Nexus, a data volume. k3s and node-exporter are systemd services, so everything starts by itself. Jenkins builds the images through the Docker socket of its own server, one build at a time. `nexus-traefik` and `jenkins` have a 1 GB swap file; the cluster nodes have no swap (kubelet).
+On `nexus-traefik` and `jenkins`, Ansible runs the containers directly; no orchestrator is needed for one or two long-running containers per server. Containers have a memory limit, the restart policy `unless-stopped` and, for Jenkins and Nexus, a data volume. k3s and node-exporter are systemd services, so everything starts by itself. Jenkins builds the images through the Docker socket of its own server, one build at a time. `nexus-traefik` and `jenkins` have a 1 GB swap file; the cluster nodes have no swap (kubelet).
 
 **Start and stop** (on the host PC, over SSH from the Mac):
 - `vagrant up` starts the servers in the order `nexus-traefik`, `jenkins`, `k8s-cp`, `k8s-w1` and creates the missing ones.
@@ -67,7 +67,7 @@ On `nexus-traefik` and `jenkins`, Ansible places a `docker-compose.yml` and star
 
 **Rebuild:**
 - **Whole platform:** restore the `clean` snapshots or run `vagrant destroy` and `vagrant up`, then `site.yml`. Secrets are not in Git, so then by hand:
-  1. In Jenkins, add the deploy key and the registry credentials and create the Pipeline job.
+  1. In Jenkins, create the Pipeline job (its configuration and credentials come from `atmos-jenkins` and Ansible Vault).
   2. Start one Jenkins build (Nexus is empty, the application cannot start without images).
   3. Bootstrap Flux with a new short-lived token; it installs the application and monitoring from `atmos-k8s`.
   4. Create the Kubernetes Secrets.
@@ -169,9 +169,9 @@ SSH from the Mac to every server (port 22) is not drawn.
 | Server configuration | Ansible, versions pinned in `group_vars/` | Mac → servers |
 | Kubernetes | k3s (pinned version), `local-path` storage | `k8s-cp`, `k8s-w1` |
 | Ingress | Traefik bundled with k3s, limits in a `HelmChartConfig` | cluster |
-| Containers outside the cluster | Docker Engine, Docker Compose (file placed by Ansible) | `nexus-traefik`, `jenkins` |
+| Containers outside the cluster | Docker Engine, containers run by Ansible | `nexus-traefik`, `jenkins` |
 | Reverse proxy | Traefik container, host network, file configuration | `nexus-traefik` |
-| CI, image build | Jenkins container (host network, pinned plugins, one executor), Docker Engine | `jenkins` |
+| CI, image build | Jenkins container built from `atmos-jenkins` (pinned plugins, configuration as code, one executor), Docker Engine | `jenkins` |
 | Image registry | Nexus Repository (Community), Docker hosted repository, weekly tasks for unused data; old tags removed by hand | `nexus-traefik` |
 | Packaging, GitOps | Helm chart `charts/atmos/`, Flux with image automation | `atmos-k8s`, cluster |
 | Firewall | `ufw` on every server; NetworkPolicy in the cluster | servers, cluster |
@@ -180,9 +180,8 @@ SSH from the Mac to every server (port 22) is not drawn.
 
 | Secret | Stored in |
 |---|---|
-| Nexus and Jenkins admin passwords, Nexus users, registry credentials | Ansible Vault in `atmos-ansible`; the vault password is in the macOS Keychain of the Mac |
+| Nexus and Jenkins admin passwords, Nexus users, registry credentials, the Nexus push password used by Jenkins | Ansible Vault in `atmos-ansible`; the vault password is in the macOS Keychain of the Mac. Jenkins reads its secrets as read-only files at start |
 | Private CA key | Only on the Mac (`~/.atmos/pki`), with a backup outside the Mac |
-| Read-only deploy key for `atmos-dev`, Nexus push user | Jenkins Credentials store |
 | OpenWeather key, MongoDB and Grafana passwords, Flux registry credentials | Kubernetes Secrets created by hand |
 | Flux deploy key (write access to `atmos-k8s` only) | Flux and GitHub |
 | GitHub token for the Flux bootstrap | used once, then revoked |
@@ -195,7 +194,7 @@ Nexus has separate users: Jenkins can push; the cluster and Flux can only pull. 
 |---|---|---|
 | 1 | GitHub | A Pull Request is merged into `develop` of `atmos-dev` |
 | 2 | Jenkins (`jenkins`) | SCM polling finds the new commit (GitHub webhooks cannot reach the home network) |
-| 3 | Jenkins (`jenkins`) | The `Jenkinsfile` from `atmos-jenkins` runs lint and tests, then Docker builds the backend and frontend images |
+| 3 | Jenkins (`jenkins`) | The `Jenkinsfile` from `atmos-dev` runs lint and tests, then Docker builds the backend and frontend images |
 | 4 | Nexus (`nexus-traefik`) | Jenkins pushes the images with the tag `<build>-<short-sha>`, for example `42-a1b2c3d` |
 | 5 | Flux (cluster) | Flux scans Nexus and selects the highest build number (numerical image policy) |
 | 6 | GitHub | Flux commits the new tag to `main` of `atmos-k8s` |
@@ -212,19 +211,19 @@ Nexus has separate users: Jenkins can push; the cluster and Flux can only pull. 
 
 | Repository | Responsibility | Main content |
 |---|---|---|
-| `atmos-dev` | Application, shared with the cloud version; on-premise docs | application code, Dockerfiles, `docs/on-premise/` |
+| `atmos-dev` | Application, shared with the cloud version; CI pipelines; on-premise docs | application code, Dockerfiles, `Jenkinsfile`, `docs/on-premise/` |
 | `atmos-ansible` | Creates and configures the servers, installs k3s | `Vagrantfile`, `inventory/`, `group_vars/`, `roles/`, `site.yml` |
-| `atmos-jenkins` | CI: build, tag, push to Nexus | `Jenkinsfile` |
+| `atmos-jenkins` | Jenkins platform: image, plugins, configuration as code (JCasC) | `Dockerfile`, `plugins.txt`, `casc/` |
 | `atmos-k8s` | Everything that runs inside the cluster | `charts/atmos/`, `flux-system/`, image automation, `monitoring/` |
 
 | Ansible role | Servers |
 |---|---|
 | `common` (packages, `ufw`, node-exporter, hosts entries, swap outside the cluster) | all four |
-| `docker` (Docker Engine, Compose plugin) | `nexus-traefik`, `jenkins` |
-| `nexus`, `traefik` (Compose services) | `nexus-traefik` |
-| `jenkins` (Compose service) | `jenkins` |
+| `docker` (Docker Engine) | `nexus-traefik`, `jenkins` |
+| `nexus`, `traefik` (containers) | `nexus-traefik` |
+| `jenkins` (container) | `jenkins` |
 | `k3s` (install, `HelmChartConfig`, `registries.yaml`) | `k8s-cp`, `k8s-w1` |
 
-Rule: a change to a server goes to `atmos-ansible`, a change to the build to `atmos-jenkins`, a change to what runs in the cluster to `atmos-k8s`. k3s itself is installed by Ansible; `atmos-k8s` holds only the workloads.
+Rule: a change to a server goes to `atmos-ansible`, a change to Jenkins itself to `atmos-jenkins`, a change to the build to the `Jenkinsfile` in `atmos-dev`, a change to what runs in the cluster to `atmos-k8s`. k3s itself is installed by Ansible; `atmos-k8s` holds only the workloads.
 
-The Jenkins job is "Pipeline script from SCM" pointing to `atmos-jenkins`; the `Jenkinsfile` checks out `develop` of `atmos-dev` with a read-only deploy key. See also [branching-model.md](branching-model.md) and [risks.md](risks.md).
+Ansible deploys a pinned release tag of `atmos-jenkins`: it builds the image on `jenkins` and passes the secrets from Ansible Vault; Jenkins applies its configuration at every start, so changes in the web interface do not last. The job reads the `Jenkinsfile` from `develop` of `atmos-dev` over HTTPS; the repository is public, so no GitHub credential is needed. See also [branching-model.md](branching-model.md) and [risks.md](risks.md).

@@ -186,7 +186,7 @@ Jenkins polls `develop` of this repository. This repository has no on-premise fi
 | Repository | Responsibility |
 |---|---|
 | `atmos-ansible` | Creates and configures the four servers (`nexus-traefik`, `jenkins`, `k8s-cp`, `k8s-w1`): VMs, base system, Docker, Nexus, Traefik, Jenkins, k3s |
-| `atmos-jenkins` | `Jenkinsfile`: lint, tests, image build, tag `<build>-<short-sha>`, push to Nexus |
+| `atmos-jenkins` | Jenkins platform: image, plugins and configuration as code |
 | `atmos-k8s` | Everything inside the cluster: Helm chart, Flux GitOps, monitoring |
 
 Flux deploys the new images from Nexus to the cluster. See [docs/on-premise](docs/on-premise/architecture.md).

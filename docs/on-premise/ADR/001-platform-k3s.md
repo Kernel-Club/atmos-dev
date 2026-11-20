@@ -49,7 +49,7 @@ CI and the registry run on two VMs outside the cluster. The cluster depends only
 - **Certified Kubernetes:** standard APIs, so the skills and manifests are the same as for any other cluster.
 - **Batteries included:** ingress (Traefik), load balancer (ServiceLB), storage (local-path) and NetworkPolicy enforcement come with k3s.
 - **Survives reboots:** k3s runs as a systemd service and the cluster comes back after the VMs start.
-- **Rebuild from Git:** the whole platform, from the empty VM to the running cluster, is described in `atmos-ansible`. The workloads that run inside the cluster are described separately in `atmos-k8s` and installed by Flux. The secrets (Jenkins credentials, Flux bootstrap, Kubernetes Secrets) and the Jenkins job are created by hand after a rebuild.
+- **Rebuild from Git:** the whole platform, from the empty VM to the running cluster, is described in `atmos-ansible`. The workloads that run inside the cluster are described separately in `atmos-k8s` and installed by Flux. Jenkins is configured from `atmos-jenkins` with secrets from Ansible Vault. The Flux bootstrap, the Kubernetes Secrets and the Jenkins job are created by hand after a rebuild.
 
 ## Consequences
 

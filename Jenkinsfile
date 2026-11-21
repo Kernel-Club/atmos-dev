@@ -74,5 +74,24 @@ pipeline {
         sh 'docker build -f frontend.Dockerfile -t "$REGISTRY/atmos-frontend:$IMAGE_TAG" .'
       }
     }
+
+    // Delivery: the images are published to Nexus, ready for deployment (by Flux).
+    stage('Publish images') {
+      steps {
+        script {
+          docker.withRegistry("https://${env.REGISTRY}", 'nexus-push') {
+            sh 'docker push "$REGISTRY/atmos-backend:$IMAGE_TAG"'
+            sh 'docker push "$REGISTRY/atmos-frontend:$IMAGE_TAG"'
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    // Also after a failed build: local images must not fill the disk of the server.
+    always {
+      sh 'docker rmi "$REGISTRY/atmos-backend:$IMAGE_TAG" "$REGISTRY/atmos-frontend:$IMAGE_TAG" || true'
+    }
   }
 }

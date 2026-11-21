@@ -5,6 +5,10 @@
 pipeline {
   agent any
 
+  environment {
+    REGISTRY = 'nexus.atmos.lan:5000'
+  }
+
   options {
     skipDefaultCheckout()                           // checkout is an explicit stage below
     disableConcurrentBuilds()                       // one build of this job at a time
@@ -17,6 +21,15 @@ pipeline {
       steps {
         checkout scm
         sh 'git log --oneline -1'
+        script {
+          // Image version: MAJOR.MINOR from the VERSION file, PATCH = number of commits,
+          // then the short commit. Counted by Git, so it keeps growing after a rebuild of Jenkins.
+          def majorMinor = readFile('VERSION').trim()
+          def commits = sh(script: 'git rev-list --count HEAD', returnStdout: true).trim()
+          def commit = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+          env.IMAGE_TAG = "${majorMinor}.${commits}-${commit}"
+          currentBuild.displayName = "#${env.BUILD_NUMBER} ${env.IMAGE_TAG}"
+        }
       }
     }
 
@@ -31,13 +44,10 @@ pipeline {
       }
       steps {
         dir('backend') {
-          sh '''
-            python -m venv .venv
-            . .venv/bin/activate
-            pip install --quiet --no-cache-dir -r requirements.txt
-            ruff check .
-            pytest
-          '''
+          sh 'python -m venv .venv'
+          sh '.venv/bin/pip install --quiet --no-cache-dir -r requirements.txt'
+          sh '.venv/bin/ruff check .'
+          sh '.venv/bin/pytest'
         }
       }
     }
@@ -54,6 +64,14 @@ pipeline {
           sh 'npm ci --no-audit --no-fund'
           sh 'npm run lint'
         }
+      }
+    }
+
+    // Images are built by the Docker Engine of the server (through its socket).
+    stage('Build images') {
+      steps {
+        sh 'docker build -f backend.Dockerfile -t "$REGISTRY/atmos-backend:$IMAGE_TAG" .'
+        sh 'docker build -f frontend.Dockerfile -t "$REGISTRY/atmos-frontend:$IMAGE_TAG" .'
       }
     }
   }

@@ -66,13 +66,11 @@ On `nexus-traefik` and `jenkins`, Ansible runs the containers directly; no orche
 - All four servers run all the time; the application keeps running if `jenkins` is stopped.
 
 **Rebuild:**
-- **Whole platform:** restore the `clean` snapshots or run `vagrant destroy` and `vagrant up`, then `site.yml`. Secrets are not in Git, so then by hand:
-  1. In Jenkins, create the Pipeline job (its configuration and credentials come from `atmos-jenkins` and Ansible Vault).
-  2. Start one Jenkins build (Nexus is empty, the application cannot start without images).
-  3. Bootstrap Flux with a new short-lived token; it installs the application and monitoring from `atmos-k8s`.
-  4. Create the Kubernetes Secrets.
-- **Only `jenkins`:** run `site.yml`, repeat step 1 and set **Next Build Number** of the job above the highest build number in Nexus, otherwise Flux keeps the old image ([ADR-002](ADR/002-cicd.md)).
-- **Only `nexus-traefik`:** running pods continue, but Nexus is empty. Run `site.yml` and step 2. The Nexus users come from Ansible Vault, so the credentials in Jenkins and the cluster stay valid.
+- **Whole platform:** restore the `clean` snapshots or run `vagrant destroy` and `vagrant up`, then `site.yml`. Jenkins comes back with its job and starts the first build by itself (Nexus is empty, the application cannot start without images). Secrets of the cluster are not in Git, so then by hand:
+  1. Bootstrap Flux with a new short-lived token; it installs the application and monitoring from `atmos-k8s`.
+  2. Create the Kubernetes Secrets.
+- **Only `jenkins`:** run `site.yml`. The job comes back by itself; image versions are counted from Git, so they keep growing.
+- **Only `nexus-traefik`:** running pods continue, but Nexus is empty. Run `site.yml` and start one Jenkins build. The Nexus users come from Ansible Vault, so the credentials in Jenkins and the cluster stay valid.
 - **Only `k8s-w1`:** run `kubectl delete node k8s-w1` first, otherwise k3s rejects the new node (old node password).
 - **`k8s-cp`:** a new control plane is a new cluster: rebuild both nodes, repeat steps 3 and 4.
 - MongoDB data and Nexus images have no backup and are lost on a rebuild.
@@ -195,8 +193,8 @@ Nexus has separate users: Jenkins can push; the cluster and Flux can only pull. 
 | 1 | GitHub | A Pull Request is merged into `develop` of `atmos-dev` |
 | 2 | Jenkins (`jenkins`) | SCM polling finds the new commit (GitHub webhooks cannot reach the home network) |
 | 3 | Jenkins (`jenkins`) | The `Jenkinsfile` from `atmos-dev` runs lint and tests, then Docker builds the backend and frontend images |
-| 4 | Nexus (`nexus-traefik`) | Jenkins pushes the images with the tag `<build>-<short-sha>`, for example `42-a1b2c3d` |
-| 5 | Flux (cluster) | Flux scans Nexus and selects the highest build number (numerical image policy) |
+| 4 | Nexus (`nexus-traefik`) | Jenkins pushes the images with the tag `<MAJOR.MINOR>.<commit count>-<short commit>`, for example `1.0.87-04d80be`; a published tag is never pushed again |
+| 5 | Flux (cluster) | Flux scans Nexus and selects the highest version (semver image policy on `MAJOR.MINOR.PATCH`) |
 | 6 | GitHub | Flux commits the new tag to `main` of `atmos-k8s` |
 | 7 | Cluster | Flux upgrades the Helm release; the nodes pull the new images; the pods are replaced |
 | 8 | Browser | `http://atmos.lan`: Traefik routes `/api` to the backend and `/` to the frontend |

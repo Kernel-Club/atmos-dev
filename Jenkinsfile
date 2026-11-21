@@ -19,5 +19,42 @@ pipeline {
         sh 'git log --oneline -1'
       }
     }
+
+    // Lint and tests run in temporary containers: nothing is installed on the server.
+    // A failed command stops the build.
+    stage('Backend: lint and tests') {
+      agent {
+        docker {
+          image 'python:3.12-slim'
+          reuseNode true          // same workspace as the checkout
+        }
+      }
+      steps {
+        dir('backend') {
+          sh '''
+            python -m venv .venv
+            . .venv/bin/activate
+            pip install --quiet --no-cache-dir -r requirements.txt
+            ruff check .
+            pytest
+          '''
+        }
+      }
+    }
+
+    stage('Frontend: lint') {
+      agent {
+        docker {
+          image 'node:22-alpine'
+          reuseNode true
+        }
+      }
+      steps {
+        dir('frontend') {
+          sh 'npm ci --no-audit --no-fund'
+          sh 'npm run lint'
+        }
+      }
+    }
   }
 }

@@ -33,11 +33,11 @@ Flow: commit to `develop` → Jenkins (lint, tests, build) → push to Nexus →
 ### Image tags
 
 ```text
-nexus.atmos.lan:5000/atmos-backend:<build>-<short-sha>
-nexus.atmos.lan:5000/atmos-frontend:<build>-<short-sha>
+nexus.atmos.lan:5000/atmos-backend:<MAJOR.MINOR>.<commit count>-<short commit>
+nexus.atmos.lan:5000/atmos-frontend:<MAJOR.MINOR>.<commit count>-<short commit>
 ```
 
-Example: `42-a1b2c3d`. The build number gives Flux a numeric order to select the newest image (numerical image policy). The SHA identifies the commit.
+Example: `1.0.87-04d80be`. MAJOR.MINOR is set in the `VERSION` file of `atmos-dev`; the commit count is counted by Git, so it keeps growing also after a rebuild of Jenkins. Flux selects the newest image by `MAJOR.MINOR.PATCH` (semver image policy); the short commit identifies the code. A published tag is never overwritten.
 
 Flux writes the new tag into `spec.values` of the HelmRelease. The tag is not kept in `charts/atmos/values.yaml`, because Flux applies a change inside the chart only when the chart version changes.
 
@@ -80,5 +80,5 @@ Suspend the image update automation, revert the tag commit in `atmos-k8s`, and r
 - **Trade-off:** Flux has a deploy key with write access to `atmos-k8s`. It is limited to that one repository.
 - **Trade-off:** a rollback needs two steps (suspend automation, revert).
 - **Trade-off:** Jenkins builds with the Docker socket of `jenkins`, which gives it root rights on that VM. Jenkins is reachable only through Traefik: `ufw` accepts port 8080 only from `nexus-traefik`.
-- **Trade-off:** the build number is part of the tag. `jenkins` can be rebuilt alone; then Jenkins counts from 1 again while Nexus keeps higher tags, and Flux does not deploy the new builds. After a rebuild of `jenkins`, **Next Build Number** of the job is set above the highest tag in Nexus.
+- **Trade-off:** the version comes from the commit count of `develop`. Rewriting the history of `develop` (force push) would lower it, so `develop` is changed only through Pull Requests.
 - **Trade-off:** the `Jenkinsfile` uses credential IDs (`nexus-push`) defined in `atmos-jenkins`; renaming one needs a change in both repositories.

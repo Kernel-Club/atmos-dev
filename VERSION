@@ -1,1 +1,5 @@
+# Version of the Atmos images built by Jenkins (Jenkinsfile): MAJOR.MINOR only.
+# The full tag is MAJOR.MINOR.<number of commits>-<short commit>, for example 1.0.83-8173742:
+# the commit count keeps growing, so the newest image always has the highest version.
+# Change it by hand for a new release line (1.0 -> 1.1, or 2.0 for a breaking change).
 1.0

@@ -24,7 +24,8 @@ pipeline {
         script {
           // Image version: MAJOR.MINOR from the VERSION file, PATCH = number of commits,
           // then the short commit. Counted by Git, so it keeps growing after a rebuild of Jenkins.
-          def majorMinor = readFile('VERSION').trim()
+          // First line of the form MAJOR.MINOR; comment lines are skipped. No such line: the build fails.
+          def majorMinor = sh(script: "grep -m1 -E '^[0-9]+\\.[0-9]+\$' VERSION", returnStdout: true).trim()
           def commits = sh(script: 'git rev-list --count HEAD', returnStdout: true).trim()
           def commit = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
           env.IMAGE_TAG = "${majorMinor}.${commits}-${commit}"

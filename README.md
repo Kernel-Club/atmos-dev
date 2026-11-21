@@ -181,7 +181,7 @@ Images: `<DOCKERHUB_NAMESPACE>/<PROJECT_NAME>-backend` and `-frontend`. The k8s 
 
 ### On-premise: Jenkins
 
-Jenkins polls `develop` of this repository. This repository has no on-premise files except the documentation in `docs/on-premise/`. The platform lives in three repositories:
+Jenkins polls `develop` of this repository and runs its `Jenkinsfile`: lint, tests, images in Nexus. The images are tagged `<MAJOR.MINOR>.<commit count>-<short commit>`, for example `1.0.83-8173742`; MAJOR.MINOR is set in the `VERSION` file. The other on-premise files are the documentation in `docs/on-premise/`. The platform lives in three repositories:
 
 | Repository | Responsibility |
 |---|---|

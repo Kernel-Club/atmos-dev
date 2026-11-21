@@ -81,8 +81,18 @@ pipeline {
       steps {
         script {
           docker.withRegistry("https://${env.REGISTRY}", 'nexus-push') {
-            sh 'docker push "$REGISTRY/atmos-backend:$IMAGE_TAG"'
-            sh 'docker push "$REGISTRY/atmos-frontend:$IMAGE_TAG"'
+            // A published tag is never overwritten (Nexus: redeploy not allowed). The same commit built
+            // again (manual build, rebuild of Jenkins) already has its images, so they are not pushed again.
+            sh '''
+              for name in atmos-backend atmos-frontend; do
+                image="$REGISTRY/$name:$IMAGE_TAG"
+                if docker manifest inspect "$image" > /dev/null 2>&1; then
+                  echo "$image is already in Nexus: not pushed again"
+                else
+                  docker push "$image"
+                fi
+              done
+            '''
           }
         }
       }

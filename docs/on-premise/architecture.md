@@ -105,7 +105,7 @@ Every server needs 2 vCPUs: with one vCPU the box kernel hangs early in boot. Th
 | Node | RAM | OS + k3s | Pods (memory limit) | Free |
 |---|---:|---:|---|---:|
 | `k8s-cp` | 2.5 GB | 0.4 + 0.9 GB | CoreDNS, metrics-server, local-path 0.3; Traefik 0.2; Flux 0.7 | ~0 |
-| `k8s-w1` | 3.5 GB | 0.4 + 0.3 GB | frontend 0.1, backend 0.3, MongoDB 0.6, Redis 0.1, Prometheus 0.6, Grafana 0.25, kube-state-metrics 0.1 | ~0.75 GB |
+| `k8s-w1` | 3.5 GB | 0.4 + 0.3 GB | frontend 0.1, backend 0.3, MongoDB 0.6, Redis 0.1, Prometheus 0.6 (+ config reload 0.02), Grafana 0.5, kube-state-metrics 0.1 | ~0.5 GB |
 
 Every pod has a memory request and limit and a CPU request (no CPU limits), because the scheduler places pods by their requests. MongoDB and Prometheus are pinned to `k8s-w1` (`nodeSelector`), because local-path keeps their data on one node. Node disks: OS 10 GB, images 10–20 GB, volumes on `k8s-w1` 10 GB (MongoDB 5, Prometheus 5), the rest is free.
 

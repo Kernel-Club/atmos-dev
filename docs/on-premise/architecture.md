@@ -8,7 +8,7 @@ The Atmos application (React, FastAPI, MongoDB, Redis) runs in Kubernetes on fou
 - **Jenkins** checks and builds the application and stores the images in **Nexus**.
 - **Flux** deploys the new images to the **k3s** cluster from Git.
 - **Traefik** is the entry point: the ingress controller of the cluster and the HTTPS reverse proxy for Jenkins and Nexus.
-- **Prometheus** and **Grafana** show the health of the application, the cluster and the servers.
+- **Prometheus** and **Grafana** show the health of the application, the cluster, the servers, the tools on them and the host PC; **Alertmanager** sends the alerts to Telegram.
 
 All work is done on the admin machine, a Mac. The host PC only runs the virtual machines. The application code is the same as in the cloud version (`atmos-dev`); only the platform around it is different.
 
@@ -25,7 +25,7 @@ flowchart LR
         jenkins["Jenkins + Docker Engine"]
     end
     subgraph k3s["k3s cluster: VMs k8s-cp, k8s-w1"]
-        pods["Traefik ingress, Flux,<br/>frontend, backend, MongoDB, Redis,<br/>Prometheus, Grafana"]
+        pods["Traefik ingress, Flux,<br/>frontend, backend, MongoDB, Redis,<br/>Prometheus, Alertmanager, Grafana"]
     end
 
     admin -- "SSH: Vagrant" --> pc
@@ -45,7 +45,7 @@ SSH from the Mac to every VM (Ansible) is not drawn.
 
 **Admin machine (Mac):** the repositories, VS Code, Git, Ansible, `kubectl`, the Flux CLI and the browser. Ansible configures the servers over SSH and writes the `*.atmos.lan` names to `/etc/hosts` of the Mac.
 
-**Host PC:** Windows 11 Pro, Intel i3-12100F (4 cores / 8 threads), 16 GB RAM, 500 GB SSD. It runs VirtualBox, Vagrant and the Windows OpenSSH server, and keeps a clone of `atmos-ansible` for the `Vagrantfile` (only `git pull`, no changes). The Mac runs the Vagrant commands on the PC over SSH. WSL2 and Hyper-V are not used and Memory Integrity (Core isolation) is turned off, so VirtualBox runs natively without the Windows hypervisor. The only manual step is installing VirtualBox, Vagrant and OpenSSH on the PC and Ansible on the Mac.
+**Host PC:** Windows 11 Pro, Intel i3-12100F (4 cores / 8 threads), 16 GB RAM, 500 GB SSD. It runs VirtualBox, Vagrant and the Windows OpenSSH server, and keeps a clone of `atmos-ansible` for the `Vagrantfile` (only `git pull`, no changes). The Mac runs the Vagrant commands on the PC over SSH. WSL2 and Hyper-V are not used and Memory Integrity (Core isolation) is turned off, so VirtualBox runs natively without the Windows hypervisor. The only manual step is installing VirtualBox, Vagrant, OpenSSH and windows_exporter (metrics of the PC, port open only to the cluster nodes) on the PC and Ansible on the Mac.
 
 **Servers:** Ubuntu Server 24.04 LTS from a pinned Vagrant box (`bento/ubuntu-24.04`). Vagrant creates them, replaces the SSH host keys of the box with unique keys and adds the SSH key of the Mac; Ansible configures them; each server then gets a `clean` snapshot.
 
@@ -105,7 +105,7 @@ Every server needs 2 vCPUs: with one vCPU the box kernel hangs early in boot. Th
 | Node | RAM | OS + k3s | Pods (memory limit) | Free |
 |---|---:|---:|---|---:|
 | `k8s-cp` | 2.5 GB | 0.4 + 0.9 GB | CoreDNS, metrics-server, local-path 0.3; Traefik 0.2; Flux 0.7 | ~0 |
-| `k8s-w1` | 3.5 GB | 0.4 + 0.3 GB | frontend 0.1, backend 0.3, MongoDB 0.6, Redis 0.1, Prometheus 0.6 (+ config reload 0.02), Grafana 0.5, kube-state-metrics 0.1 | ~0.5 GB |
+| `k8s-w1` | 3.5 GB | 0.4 + 0.3 GB | frontend 0.1, backend 0.3, MongoDB 0.6, Redis 0.1, Prometheus 0.6 (+ config reload 0.02), Alertmanager 0.06, Grafana 0.5, kube-state-metrics 0.1 | ~0.45 GB |
 
 Every pod has a memory request and limit and a CPU request (no CPU limits), because the scheduler places pods by their requests. MongoDB and Prometheus are pinned to `k8s-w1` (`nodeSelector`), because local-path keeps their data on one node. Node disks: OS 10 GB, images 10–20 GB, volumes on `k8s-w1` 10 GB (MongoDB 5, Prometheus 5), the rest is free.
 
@@ -127,8 +127,8 @@ Every pod has a memory request and limit and a CPU request (no CPU limits), beca
 
 | Server | Address | Open ports (`ufw`) |
 |---|---|---|
-| `nexus-traefik` | 192.168.0.53 | 22 (Mac), 80/443 (home network), 5000 (`jenkins`, cluster nodes), 9100 (cluster nodes) |
-| `jenkins` | 192.168.0.54 | 22 (Mac), 8080 (`nexus-traefik` only), 9100 (cluster nodes) |
+| `nexus-traefik` | 192.168.0.53 | 22 (Mac), 80/443 (home network), 5000 (`jenkins`, cluster nodes), 9100, 9323 and 9110 (cluster nodes: metrics of the server, Docker and Traefik) |
+| `jenkins` | 192.168.0.54 | 22 (Mac), 8080 (`nexus-traefik` only), 9100 and 9323 (cluster nodes: metrics of the server and Docker) |
 | `k8s-cp` | 192.168.0.51 | 22 (Mac), 6443 (Mac, `k8s-w1`), 10250 and 8472/udp (cluster nodes), 80/443 (home network), 9100 (cluster nodes) |
 | `k8s-w1` | 192.168.0.52 | 22 (Mac), 10250 and 8472/udp (cluster nodes), 80/443 (home network), 9100 (cluster nodes) |
 
@@ -173,18 +173,22 @@ SSH from the Mac to every server (port 22) is not drawn.
 | Image registry | Nexus Repository (Community), Docker hosted repository, weekly tasks for unused data; old tags removed by hand | `nexus-traefik` |
 | Packaging, GitOps | Helm chart `charts/atmos/`, Flux with image automation | `atmos-k8s`, cluster |
 | Firewall | `ufw` on every server; NetworkPolicy in the cluster | servers, cluster |
-| Monitoring | Prometheus (retention 3 days), kube-state-metrics, Grafana; node-exporter on all four servers | cluster, servers |
+| Monitoring | Prometheus (retention 3 days), kube-state-metrics, Grafana; node-exporter on all four servers, windows_exporter on the host PC, metrics of Docker, Traefik, Jenkins and Nexus | cluster, servers, host PC |
+| Alerts | Alertmanager (one replica) → Telegram bot `@atmos_alerts_bot` | cluster |
 | Logs | `kubectl logs` only, no log storage, to keep RAM free | cluster |
 
 | Secret | Stored in |
 |---|---|
 | Nexus and Jenkins admin passwords, Nexus users, registry credentials, the Nexus push password used by Jenkins | Ansible Vault in `atmos-ansible`; the vault password is in the macOS Keychain of the Mac. Jenkins reads its secrets as read-only files at start |
 | Private CA key | Only on the Mac (`~/.atmos/pki`), with a backup outside the Mac |
-| OpenWeather key, MongoDB and Grafana passwords, Flux registry credentials | Kubernetes Secrets created by hand |
+| OpenWeather key, MongoDB password, Flux registry credentials | Kubernetes Secrets created by hand |
+| Grafana admin password, Nexus metrics password, Telegram bot token | Ansible Vault in `atmos-ansible`, copied by hand into Kubernetes Secrets |
 | Flux deploy key (write access to `atmos-k8s` only) | Flux and GitHub |
 | GitHub token for the Flux bootstrap | used once, then revoked |
 
-Nexus has separate users: Jenkins can push; the cluster and Flux can only pull. The main choices are explained in [ADR-001 Platform](ADR/001-platform-k3s.md), [ADR-002 CI/CD](ADR/002-cicd.md) and [ADR-003 Ingress](ADR/003-ingress-traefik.md).
+Nexus has separate users: Jenkins can push; the cluster and Flux can only pull; Prometheus can only read the metrics. The metrics of Jenkins and Nexus are read through Traefik over HTTPS; the Jenkins path `/prometheus` answers without login, so Traefik allows it only from the cluster nodes. The main choices are explained in [ADR-001 Platform](ADR/001-platform-k3s.md), [ADR-002 CI/CD](ADR/002-cicd.md) and [ADR-003 Ingress](ADR/003-ingress-traefik.md).
+
+**Alerts** (rules in `monitoring/prometheus-values.yaml` of `atmos-k8s`): a target does not answer, less than 15 % free disk (servers and host PC), memory above 90 % for 10 minutes (servers; the host PC is full by design), a node not Ready, a pod restarting in a loop, the platform certificate expiring in less than 30 days, a failed Jenkins build. Alertmanager sends one message per problem and server, a reminder every 4 hours while it lasts and a message when it is resolved.
 
 ## 6. Delivery flow
 

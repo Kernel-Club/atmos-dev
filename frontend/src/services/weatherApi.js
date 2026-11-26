@@ -11,6 +11,17 @@ export async function getWeather(city) {
   return response.json()
 }
 
+export async function getForecast(city) {
+  const response = await fetch(`${API_URL}/forecast/${encodeURIComponent(city)}`)
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.detail || 'Failed to fetch forecast data')
+  }
+
+  return response.json()
+}
+
 export async function getHistory() {
   const response = await fetch(`${API_URL}/history`)
 

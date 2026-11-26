@@ -84,3 +84,52 @@ def test_weather_city_not_found(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "City not found"}
+
+@patch(
+    "app.services.forecast.redis_client",
+)
+@patch(
+    "app.services.forecast.get_forecast_data",
+    new_callable=AsyncMock,
+)
+def test_forecast_success(
+    mock_get_forecast,
+    mock_redis,
+):
+    mock_redis.get = AsyncMock(return_value=None)
+    mock_redis.set = AsyncMock()
+
+    mock_get_forecast.return_value = {
+        "city": {"name": "Seoul", "timezone": 32400},
+        "list": [
+            {
+                "dt": 1764180000,
+                "main": {"temp": 3.6},
+                "weather": [{"description": "clear sky"}],
+            },
+            {
+                "dt": 1764190800,
+                "main": {"temp": 7.2},
+                "weather": [{"description": "few clouds"}],
+            },
+        ],
+    }
+
+    response = client.get("/api/forecast/Seoul")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "city": "Seoul",
+        "points": [
+            {
+                "timestamp": 1764180000,
+                "temperature": 4,
+                "description": "clear sky",
+            },
+            {
+                "timestamp": 1764190800,
+                "temperature": 7,
+                "description": "few clouds",
+            },
+        ],
+    }

@@ -67,8 +67,8 @@ On `nexus-traefik` and `jenkins`, Ansible runs the containers directly; no orche
 
 **Rebuild:**
 - **Whole platform:** restore the `clean` snapshots or run `vagrant destroy` and `vagrant up`, then `site.yml`. Jenkins comes back with its job and starts the first build by itself (Nexus is empty, the application cannot start without images). Secrets of the cluster are not in Git, so then by hand:
-  1. Bootstrap Flux with a new short-lived token; it installs the application and monitoring from `atmos-k8s`.
-  2. Create the Kubernetes Secrets.
+  1. Create the Kubernetes Secrets (README of `atmos-k8s`; the platform ones from Ansible Vault).
+  2. Bootstrap Flux with a new short-lived token, switch it to the GitHub App and revoke the token; Flux installs the application and monitoring from `atmos-k8s`.
 - **Only `jenkins`:** run `site.yml`. The job comes back by itself; image versions are counted from Git, so they keep growing.
 - **Only `nexus-traefik`:** running pods continue, but Nexus is empty. Run `site.yml` and start one Jenkins build. The Nexus users come from Ansible Vault, so the credentials in Jenkins and the cluster stay valid.
 - **Only `k8s-w1`:** run `kubectl delete node k8s-w1` first, otherwise k3s rejects the new node (old node password).
@@ -183,7 +183,7 @@ SSH from the Mac to every server (port 22) is not drawn.
 | Private CA key | Only on the Mac (`~/.atmos/pki`), with a backup outside the Mac |
 | OpenWeather key, MongoDB password, Flux registry credentials | Kubernetes Secrets created by hand |
 | Grafana admin password, Nexus metrics password, Telegram bot token | Ansible Vault in `atmos-ansible`, copied by hand into Kubernetes Secrets |
-| Flux deploy key (write access to `atmos-k8s` only) | Flux and GitHub |
+| Private key of the GitHub App `atmos-flux` (write access to `atmos-k8s` only) | Ansible Vault in `atmos-ansible`, copied by hand into a Kubernetes Secret |
 | GitHub token for the Flux bootstrap | used once, then revoked |
 
 Nexus has separate users: Jenkins can push; the cluster and Flux can only pull; Prometheus can only read the metrics. The metrics of Jenkins and Nexus are read through Traefik over HTTPS; the Jenkins path `/prometheus` answers without login, so Traefik allows it only from the cluster nodes. The main choices are explained in [ADR-001 Platform](ADR/001-platform-k3s.md), [ADR-002 CI/CD](ADR/002-cicd.md) and [ADR-003 Ingress](ADR/003-ingress-traefik.md).
@@ -204,7 +204,7 @@ Nexus has separate users: Jenkins can push; the cluster and Flux can only pull; 
 | 8 | Browser | `http://atmos.lan`: Traefik routes `/api` to the backend and `/` to the frontend |
 
 - Jenkins does CI, Flux does CD. Jenkins has no kubeconfig and no access to `atmos-k8s`; every deployed version is a commit there.
-- The tags are in `spec.values` of the HelmRelease, not in `charts/atmos/values.yaml`: Flux applies a change inside the chart only when the chart version changes.
+- The tags are in `spec.values` of the HelmRelease, not in `charts/atmos/values.yaml`: the deployed version of every image is in one file next to the other Flux objects.
 - **Rollback:** `flux suspend image update`, revert the tag commit, resume after the fix.
 - **Status:** `flux get helmreleases` and `flux get images all`.
 - The GitHub Actions workflow in `atmos-dev` belongs to the cloud version and starts only by hand.
@@ -216,7 +216,7 @@ Nexus has separate users: Jenkins can push; the cluster and Flux can only pull; 
 | `atmos-dev` | Application, shared with the cloud version; CI pipelines; on-premise docs | application code, Dockerfiles, `Jenkinsfile`, `docs/on-premise/` |
 | `atmos-ansible` | Creates and configures the servers, installs k3s | `Vagrantfile`, `inventory/`, `group_vars/`, `roles/`, `site.yml` |
 | `atmos-jenkins` | Jenkins platform: image, plugins, configuration as code (JCasC) | `Dockerfile`, `plugins.txt`, `casc/` |
-| `atmos-k8s` | Everything that runs inside the cluster | `charts/atmos/`, `flux-system/`, image automation, `monitoring/` |
+| `atmos-k8s` | Everything that runs inside the cluster | `charts/atmos/`; `clusters/atmos/` with Flux, the HelmReleases of the application and monitoring and the image automation |
 
 | Ansible role | Servers |
 |---|---|

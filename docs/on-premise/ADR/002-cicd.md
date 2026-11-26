@@ -26,7 +26,7 @@ Each part lives in its own repository:
 | Install Docker, Nexus, Traefik (`nexus-traefik`) and Docker, Jenkins (`jenkins`), run as Docker containers by Ansible; admin passwords in Ansible Vault | `atmos-ansible` (`roles/docker/`, `roles/nexus/`, `roles/traefik/`, `roles/jenkins/`) |
 | Jenkins platform: image, plugins, configuration as code | `atmos-jenkins` (`Dockerfile`, `plugins.txt`, `casc/`) |
 | CI pipeline: lint, tests, image build, tagging, push to Nexus | `atmos-dev` (`Jenkinsfile`) |
-| CD: Flux, image automation, Helm chart | `atmos-k8s` (`flux-system/`, `charts/atmos/`) |
+| CD: Flux, image automation, Helm chart | `atmos-k8s` (`clusters/atmos/`, `charts/atmos/`) |
 
 Flow: commit to `develop` → Jenkins (lint, tests, build) → push to Nexus → Flux sees the new tag → Flux commits it to `atmos-k8s` → Flux upgrades the Helm release. Jenkins does CI, Flux does CD. Jenkins has no kubeconfig and no access to `atmos-k8s`.
 
@@ -39,7 +39,7 @@ nexus.atmos.lan:5000/atmos-frontend:<MAJOR.MINOR>.<commit count>-<short commit>
 
 Example: `1.0.87-04d80be`. MAJOR.MINOR is set in the `VERSION` file of `atmos-dev`; the commit count is counted by Git, so it keeps growing also after a rebuild of Jenkins. Flux selects the newest image by `MAJOR.MINOR.PATCH` (semver image policy); the short commit identifies the code. A published tag is never overwritten.
 
-Flux writes the new tag into `spec.values` of the HelmRelease. The tag is not kept in `charts/atmos/values.yaml`, because Flux applies a change inside the chart only when the chart version changes.
+Flux writes the new tag into `spec.values` of the HelmRelease. The tag is not kept in `charts/atmos/values.yaml`: the deployed version of every image is in one file next to the other Flux objects, and the chart keeps only defaults.
 
 ### Access
 
@@ -47,7 +47,7 @@ Flux writes the new tag into `spec.values` of the HelmRelease. The tag is not ke
 |---|---|
 | Jenkins | read `atmos-dev`; push to Nexus |
 | Cluster nodes and Flux | pull from Nexus |
-| Flux | read and write `atmos-k8s` only (deploy key) |
+| Flux | read and write `atmos-k8s` only (GitHub App of the organization) |
 
 ### Rollback
 
@@ -77,7 +77,7 @@ Suspend the image update automation, revert the tag commit in `atmos-k8s`, and r
 - **Positive:** the cluster pulls its state; no inbound access from CI to the cluster.
 - **Trade-off:** a build starts up to one polling interval after the commit.
 - **Trade-off:** the registry uses a self-signed certificate. The CA must be trusted by Docker on `jenkins`, by k3s on the nodes and by Flux.
-- **Trade-off:** Flux has a deploy key with write access to `atmos-k8s`. It is limited to that one repository.
+- **Trade-off:** Flux writes to `atmos-k8s` through a GitHub App (deploy keys are turned off by the policy of the organization). The App is installed only on that repository with contents read and write; Flux gets a token for one hour at a time from its private key, so no long-lived token is stored.
 - **Trade-off:** a rollback needs two steps (suspend automation, revert).
 - **Trade-off:** Jenkins builds with the Docker socket of `jenkins`, which gives it root rights on that VM. Jenkins is reachable only through Traefik: `ufw` accepts port 8080 only from `nexus-traefik`.
 - **Trade-off:** the version comes from the commit count of `develop`. Rewriting the history of `develop` (force push) would lower it, so `develop` is changed only through Pull Requests.

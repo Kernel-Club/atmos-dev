@@ -2,6 +2,7 @@ from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import CORS_ORIGINS, OPENWEATHER_API_KEY
+from app.services.forecast import get_forecast
 from app.services.history import clear_weather_history, get_weather_history
 from app.services.weather import get_weather
 
@@ -34,6 +35,16 @@ async def config_check() -> dict[str, bool]:
 async def weather(city: str):
     try:
         return await get_weather(city)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        )
+
+@api.get("/forecast/{city}")
+async def forecast(city: str):
+    try:
+        return await get_forecast(city)
     except ValueError as exc:
         raise HTTPException(
             status_code=404,

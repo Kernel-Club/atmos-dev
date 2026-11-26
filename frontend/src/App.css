@@ -1359,3 +1359,363 @@ drop-shadow(0 0 40px rgba(10, 40, 160, 0.3));
     opacity: 1;
   }
 }
+/* Forecast: next 24 hours and daily forecast, as horizontal strips */
+
+.forecast-grid {
+  display: grid;
+  gap: 20px;
+
+  margin-top: 20px;
+}
+
+.forecast-card {
+  padding: 26px 30px;
+
+  border: 1px solid rgba(105, 175, 235, 0.25);
+  border-radius: 20px;
+
+  background: linear-gradient(
+    135deg,
+    rgba(3, 15, 27, 0.94),
+    rgba(4, 17, 30, 0.78)
+  );
+
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+}
+
+.forecast-list {
+  display: grid;
+  grid-auto-columns: minmax(104px, 1fr);
+  grid-auto-flow: column;
+  gap: 12px;
+
+  margin-top: 8px;
+  padding-bottom: 6px;
+
+  overflow-x: auto;
+}
+
+.forecast-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+
+  padding: 16px 10px;
+
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+
+  background: rgba(8, 25, 42, 0.35);
+}
+
+.forecast-time {
+  color: #8fa1b5;
+
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.forecast-icon {
+  width: 30px;
+  height: 30px;
+
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+.icon-condition-clear  { color: #ffc75a; }
+.icon-condition-cloudy { color: #9cc8f2; }
+.icon-condition-rain   { color: #4fa8ff; }
+.icon-condition-snow   { color: #c4ecff; }
+.icon-condition-storm  { color: #b394ff; }
+.icon-condition-fog    { color: #8fa1b5; }
+.icon-condition-wind   { color: #5ed6c6; }
+
+.forecast-item strong {
+  color: #edf5fc;
+
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.forecast-temps {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.forecast-temps span {
+  color: #8fa1b5;
+
+  font-size: 16px;
+}
+
+.forecast-description {
+  color: #8fa1b5;
+
+  font-size: 12px;
+  text-align: center;
+  text-transform: capitalize;
+}
+
+@media (max-width: 600px) {
+  .forecast-card {
+    padding: 20px 18px;
+  }
+}
+
+/* Compact current weather card with today's 24-hour strip inside */
+
+.weather-card {
+  min-height: 0;
+}
+
+.weather-content {
+  grid-template-columns: minmax(0, 1fr) 360px;
+  min-height: 0;
+}
+
+.weather-main {
+  min-height: 240px;
+  padding: 30px 46px;
+}
+
+.weather-main::before {
+  width: 260px;
+  height: 260px;
+}
+
+.weather-main::after {
+  right: 12%;
+  width: 180px;
+  height: 172px;
+}
+
+.weather-heading {
+  margin-bottom: 18px;
+}
+
+.weather-heading h2 {
+  font-size: 36px;
+}
+
+.temperature span {
+  font-size: clamp(84px, 8vw, 116px);
+}
+
+.weather-details {
+  padding: 16px 34px;
+}
+
+.weather-detail {
+  min-height: 72px;
+}
+
+.today-strip {
+  position: relative;
+  z-index: 1;
+
+  padding: 22px 30px 26px;
+
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+@media (max-width: 900px) {
+  .weather-card,
+  .weather-content {
+    min-height: 0;
+  }
+
+  .weather-content {
+    grid-template-columns: 1fr;
+  }
+
+  .weather-main {
+    min-height: 280px;
+    padding: 34px 30px;
+  }
+
+  .weather-main::after {
+    right: 8%;
+    width: 150px;
+    height: 145px;
+  }
+
+  .weather-detail {
+    min-height: 56px;
+  }
+}
+
+@media (max-width: 600px) {
+  .weather-main {
+    min-height: 250px;
+    padding: 28px 22px;
+  }
+
+  .weather-main::after {
+    top: 30%;
+    right: 4%;
+    width: 100px;
+    height: 96px;
+    opacity: 0.55;
+  }
+
+  .weather-heading h2 {
+    font-size: 29px;
+  }
+
+  .temperature span {
+    font-size: 76px;
+  }
+
+  .today-strip {
+    padding: 18px 18px 22px;
+  }
+}
+
+/* Current weather as one row: city on the left, icon in the centre,
+   temperature on the right next to the details column */
+
+.weather-main {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.weather-heading {
+  margin-bottom: 0;
+}
+
+.weather-heading h2 {
+  font-size: 54px;
+}
+
+.weather-main::before {
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
+}
+
+.weather-main::after {
+  left: 50%;
+  right: auto;
+  width: 230px;
+  height: 220px;
+  transform: translate(-50%, -50%);
+}
+
+@media (max-width: 900px) {
+  .weather-heading h2 {
+    font-size: 44px;
+  }
+
+  .weather-main::after {
+    width: 170px;
+    height: 162px;
+  }
+}
+
+@media (max-width: 600px) {
+  .weather-heading h2 {
+    font-size: 32px;
+  }
+
+  .weather-main::after {
+    top: 50%;
+    width: 110px;
+    height: 105px;
+    opacity: 0.8;
+  }
+}
+
+/* Ghost (skeleton) state: same layout before a city is chosen,
+   while loading and on errors */
+
+.weather-heading .ghost-title {
+  color: #c9d6e3;
+
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.ghost-text {
+  margin: 10px 0 0;
+
+  color: #728398;
+
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.is-ghost .temperature span,
+.is-ghost .temperature sup,
+.is-ghost .weather-detail strong {
+  color: rgba(143, 161, 181, 0.35);
+  text-shadow: none;
+}
+
+.ghost-item {
+  min-height: 150px;
+}
+
+.ghost-bar,
+.ghost-dot {
+  display: block;
+
+  border-radius: 6px;
+
+  background: rgba(143, 161, 181, 0.12);
+}
+
+.ghost-bar {
+  width: 44px;
+  height: 14px;
+}
+
+.ghost-bar-short {
+  width: 36px;
+  height: 10px;
+}
+
+.ghost-bar-long {
+  width: 64px;
+  height: 10px;
+}
+
+.ghost-dot {
+  width: 30px;
+  height: 30px;
+
+  border-radius: 50%;
+}
+
+.is-loading .ghost-bar,
+.is-loading .ghost-dot {
+  animation: ghostPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ghostPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .weather-heading .ghost-title {
+    font-size: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-loading .ghost-bar,
+  .is-loading .ghost-dot {
+    animation: none;
+  }
+}

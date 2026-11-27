@@ -1,5 +1,6 @@
 // CI pipeline of Atmos for the on-premise platform (Jenkins on the jenkins server).
 // Checks, tests and packages every change of develop into versioned images in Nexus.
+// Security and quality checks run before the images are built (US-07).
 // The job that runs it is defined in atmos-jenkins.
 
 pipeline {
@@ -36,6 +37,28 @@ pipeline {
             // A test branch: all checks run, but no image is published (see the stage below).
             currentBuild.displayName += " (${env.BUILD_BRANCH}, not published)"
           }
+        }
+      }
+    }
+
+    // Secrets: every commit of the history is checked for leaked keys, tokens and passwords.
+    // --redact keeps the values out of the log and the report; any finding stops the build.
+    stage('Secrets') {
+      agent {
+        docker {
+          image 'zricethezav/gitleaks:v8.30.1'
+          args '--entrypoint='    // the image starts gitleaks itself; Jenkins needs a shell
+          reuseNode true
+        }
+      }
+      steps {
+        sh 'gitleaks git . --redact --no-banner --report-format sarif --report-path gitleaks.sarif'
+      }
+      post {
+        always {
+          // Findings on the build page (Warnings plugin) and the report kept with the build.
+          recordIssues enabledForFailure: true, tools: [sarif(pattern: 'gitleaks.sarif', id: 'gitleaks', name: 'Gitleaks')]
+          archiveArtifacts artifacts: 'gitleaks.sarif', allowEmptyArchive: true
         }
       }
     }

@@ -116,3 +116,4 @@ coverage.xml
 *.sarif
 .scannerwork/
 .sonar/
+.tool-home/

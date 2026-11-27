@@ -3,6 +3,19 @@
 // Security and quality checks run before the images are built (US-07).
 // The job that runs it is defined in atmos-jenkins.
 
+// Tool images (scanners, Python, Node) run with the workspace of this job only: a subpath of the
+// volume jenkins_home is mounted at the same path. They never see the secrets of Jenkins
+// (/run/secrets) or the rest of jenkins_home, unlike `agent { docker }`, which mounts every volume
+// of the Jenkins container (--volumes-from). HOME is a folder in the workspace, so caches are kept.
+def runTool(String image, String command, String envArgs = '') {
+  sh """
+    docker run --rm -u 1000:1000 \\
+      --mount type=volume,src=jenkins_home,dst="\$WORKSPACE",volume-subpath="workspace/\$JOB_NAME" \\
+      -w "\$WORKSPACE" -e HOME="\$WORKSPACE/.tool-home" ${envArgs} \\
+      --entrypoint sh ${image} -c '${command}'
+  """
+}
+
 pipeline {
   agent any
 
@@ -10,6 +23,13 @@ pipeline {
     REGISTRY = 'nexus.atmos.lan:5000'
     // Branch from the job parameter (atmos-jenkins); a build without the parameter is develop.
     BUILD_BRANCH = "${params.BRANCH ?: 'develop'}"
+
+    // Tool images, pinned by digest: a tag can be moved to other content, a digest cannot
+    // (the Trivy images were replaced by malware under existing tags in March 2026).
+    GITLEAKS_IMAGE = 'zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f'
+    PYTHON_IMAGE   = 'python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b'
+    NODE_IMAGE     = 'node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a'
+    SONAR_IMAGE    = 'sonarsource/sonar-scanner-cli:12.1.0.3225_8.0.1@sha256:a429d20d22c8d97b9a10ea5585f1c56d2a54796f0ae3da06c7a1a49eec78e6c2'
   }
 
   options {
@@ -24,6 +44,7 @@ pipeline {
       steps {
         checkout scm
         sh 'git log --oneline -1'
+        sh 'mkdir -p .tool-home'   // HOME of the tool containers (runTool)
         script {
           // Image version: MAJOR.MINOR from the VERSION file, PATCH = number of commits,
           // then the short commit. Counted by Git, so it keeps growing after a rebuild of Jenkins.
@@ -44,15 +65,8 @@ pipeline {
     // Secrets: every commit of the history is checked for leaked keys, tokens and passwords.
     // --redact keeps the values out of the log and the report; any finding stops the build.
     stage('Secrets') {
-      agent {
-        docker {
-          image 'zricethezav/gitleaks:v8.30.1'
-          args '--entrypoint='    // the image starts gitleaks itself; Jenkins needs a shell
-          reuseNode true
-        }
-      }
       steps {
-        sh 'gitleaks git . --redact --no-banner --report-format sarif --report-path gitleaks.sarif'
+        runTool(env.GITLEAKS_IMAGE, 'gitleaks git . --redact --no-banner --report-format sarif --report-path gitleaks.sarif')
       }
       post {
         always {
@@ -63,23 +77,14 @@ pipeline {
       }
     }
 
-    // Lint and tests run in temporary containers: nothing is installed on the server.
+    // Lint and tests run in temporary containers (runTool): nothing is installed on the server.
     // A failed command stops the build.
     stage('Backend: lint and tests') {
-      agent {
-        docker {
-          image 'python:3.12-slim'
-          reuseNode true          // same workspace as the checkout
-        }
-      }
       steps {
-        dir('backend') {
-          sh 'python -m venv .venv'
-          sh '.venv/bin/pip install --quiet --no-cache-dir -r requirements.txt'
-          sh '.venv/bin/ruff check .'
-          // Coverage report for the code analysis below
-          sh '.venv/bin/pytest --cov=app --cov-report=xml:coverage.xml --junitxml=pytest.xml'
-        }
+        runTool(env.PYTHON_IMAGE, 'cd backend && python -m venv .venv && .venv/bin/pip install --quiet --no-cache-dir -r requirements.txt')
+        runTool(env.PYTHON_IMAGE, 'cd backend && .venv/bin/ruff check .')
+        // Coverage report for the code analysis below
+        runTool(env.PYTHON_IMAGE, 'cd backend && .venv/bin/pytest --cov=app --cov-report=xml:coverage.xml --junitxml=pytest.xml')
       }
       post {
         always {
@@ -89,17 +94,9 @@ pipeline {
     }
 
     stage('Frontend: lint') {
-      agent {
-        docker {
-          image 'node:22-alpine'
-          reuseNode true
-        }
-      }
       steps {
-        dir('frontend') {
-          sh 'npm ci --no-audit --no-fund'
-          sh 'npm run lint'
-        }
+        runTool(env.NODE_IMAGE, 'cd frontend && npm ci --no-audit --no-fund')
+        runTool(env.NODE_IMAGE, 'cd frontend && npm run lint')
       }
     }
 
@@ -107,19 +104,14 @@ pipeline {
     // (settings in sonar-project.properties). The scanner waits for the quality gate; a failed gate
     // stops the build. Each branch is a separate branch in SonarQube Cloud.
     stage('Code analysis') {
-      agent {
-        docker {
-          image 'sonarsource/sonar-scanner-cli:12.1.0.3225_8.0.1'
-          args '--entrypoint='
-          reuseNode true
-        }
-      }
       environment {
         SONAR_USER_HOME = "${env.WORKSPACE}/.sonar"   // cache of the analyzers, kept between builds
       }
       steps {
         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-          sh 'sonar-scanner -Dsonar.branch.name="$BUILD_BRANCH"'
+          // -e NAME passes the value from the environment of this step: the token is not in the command
+          runTool(env.SONAR_IMAGE, 'sonar-scanner -Dsonar.branch.name="$BUILD_BRANCH"',
+                  '-e SONAR_TOKEN -e SONAR_USER_HOME -e BUILD_BRANCH')
         }
       }
     }

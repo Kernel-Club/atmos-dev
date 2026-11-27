@@ -7,6 +7,8 @@ pipeline {
 
   environment {
     REGISTRY = 'nexus.atmos.lan:5000'
+    // Branch from the job parameter (atmos-jenkins); a build without the parameter is develop.
+    BUILD_BRANCH = "${params.BRANCH ?: 'develop'}"
   }
 
   options {
@@ -30,6 +32,10 @@ pipeline {
           def commit = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
           env.IMAGE_TAG = "${majorMinor}.${commits}-${commit}"
           currentBuild.displayName = "#${env.BUILD_NUMBER} ${env.IMAGE_TAG}"
+          if (env.BUILD_BRANCH != 'develop') {
+            // A test branch: all checks run, but no image is published (see the stage below).
+            currentBuild.displayName += " (${env.BUILD_BRANCH}, not published)"
+          }
         }
       }
     }
@@ -77,7 +83,11 @@ pipeline {
     }
 
     // Delivery: the images are published to Nexus, ready for deployment (by Flux).
+    // Only develop publishes: Flux deploys every new tag, so a test branch must never reach Nexus.
     stage('Publish images') {
+      when {
+        expression { env.BUILD_BRANCH == 'develop' }
+      }
       steps {
         script {
           docker.withRegistry("https://${env.REGISTRY}", 'nexus-push') {

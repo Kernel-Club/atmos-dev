@@ -110,3 +110,9 @@ redis/
 *.db
 *.sqlite
 *.sqlite3
+
+# CI reports and scanner caches
+coverage.xml
+*.sarif
+.scannerwork/
+.sonar/

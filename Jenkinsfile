@@ -77,7 +77,13 @@ pipeline {
           sh 'python -m venv .venv'
           sh '.venv/bin/pip install --quiet --no-cache-dir -r requirements.txt'
           sh '.venv/bin/ruff check .'
-          sh '.venv/bin/pytest'
+          // Coverage report for the code analysis below
+          sh '.venv/bin/pytest --cov=app --cov-report=xml:coverage.xml --junitxml=pytest.xml'
+        }
+      }
+      post {
+        always {
+          junit testResults: 'backend/pytest.xml', allowEmptyResults: true
         }
       }
     }
@@ -93,6 +99,27 @@ pipeline {
         dir('frontend') {
           sh 'npm ci --no-audit --no-fund'
           sh 'npm run lint'
+        }
+      }
+    }
+
+    // Code analysis: bugs, vulnerabilities and code smells with the test coverage in SonarQube Cloud
+    // (settings in sonar-project.properties). The scanner waits for the quality gate; a failed gate
+    // stops the build. Each branch is a separate branch in SonarQube Cloud.
+    stage('Code analysis') {
+      agent {
+        docker {
+          image 'sonarsource/sonar-scanner-cli:12.1.0.3225_8.0.1'
+          args '--entrypoint='
+          reuseNode true
+        }
+      }
+      environment {
+        SONAR_USER_HOME = "${env.WORKSPACE}/.sonar"   // cache of the analyzers, kept between builds
+      }
+      steps {
+        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+          sh 'sonar-scanner -Dsonar.branch.name="$BUILD_BRANCH"'
         }
       }
     }
